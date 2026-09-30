@@ -4,6 +4,8 @@ A minimal voice companion built with React, TypeScript, and Vite. Start a call, 
 
 The interface uses a charcoal background, solid controls, and restrained motion. The call button turns red when it ends or cancels a call. There is no visible copy in normal operation. Accessible labels and contextual errors are in English.
 
+The [portfolio case study](.portfolio/project.md) documents the interaction, architecture, and current scope.
+
 ## Run locally
 
 Use Node.js 22.18+ and pnpm.
@@ -43,7 +45,7 @@ GPT-Live handles the spoken conversation and delegates to Luna when needed. Voic
 
 The browser captures the microphone once and creates a WebRTC connection. A local `POST /api/session` endpoint exchanges its SDP offer with OpenAI using the official TypeScript SDK. The API key and model configuration stay on the server. The browser receives only the session ID and SDP answer.
 
-Microphone audio travels to OpenAI over the WebRTC media track. A local analyser supplies the waveform's frequency bands without recording or scrolling history. A separate Web Audio graph plays the remote model track and measures it for the orb; microphone input never drives the orb or plays through the speakers.
+Microphone audio travels to OpenAI over the WebRTC media track. A local analyser supplies the waveform's frequency bands without recording or scrolling history. Bars follow speech quickly and settle gradually in silence. A native audio element plays the remote model stream, while a separate analyser measures it for the orb. Chrome needs the media player to consume the remote stream; a Web Audio analyser alone can remain silent even while WebRTC receives packets. Microphone input never drives the orb or plays through the speakers. If the browser blocks playback or the player later stops or fails, the call ends with an actionable error and releases the microphone.
 
 The call becomes ready on `session.started`. Ending it silences both sides, sends `session.close`, and waits for `session.closed` before releasing the connection. A bounded timeout releases resources if finalization cannot be confirmed. Canceled startup, denied permissions, disconnects, unmounts, and page exit also release local resources. Leaving the page closes the transport immediately and cannot wait for final acknowledgment.
 
@@ -76,7 +78,7 @@ pnpm build
 
 Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, and OpenAI requests. They cover only the core session contract, separation of input/output audio, cancellation, cleanup, and necessary request/error handling. They make no live API calls.
 
-A real voice conversation and browser playback have not been validated because no OpenAI API key was available during implementation.
+Unit tests do not verify audible browser playback. A real voice conversation is a separate manual check with a configured OpenAI API key.
 
 ## Build and preview
 

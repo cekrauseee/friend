@@ -40,6 +40,7 @@ export class LiveSession {
   #events: RTCDataChannel | null = null
   #input: AudioMeter | null = null
   #output: AudioMeter | null = null
+  #player: HTMLAudioElement | null = null
   #frame = 0
   #connectionTimer: ReturnType<typeof setTimeout> | undefined
   #closeTimer: ReturnType<typeof setTimeout> | undefined
@@ -67,6 +68,14 @@ export class LiveSession {
     clearTimeout(this.#closeTimer)
     clearTimeout(this.#disconnectTimer)
     cancelAnimationFrame(this.#frame)
+    if (this.#player) {
+      this.#player.onerror = null
+      this.#player.onpause = null
+      this.#player.onended = null
+      this.#player.pause()
+      this.#player.srcObject = null
+    }
+    this.#player = null
     this.#input?.disconnect()
     this.#output?.disconnect()
     this.#input = null
@@ -124,8 +133,8 @@ export class LiveSession {
   #sampleAudio = (time: number, previous = 0) => {
     if (this.#snapshot.status !== 'connecting' && this.#snapshot.status !== 'connected') return
     if (time - previous >= 1000 / 30) {
-      const input = this.#input?.read(true)
-      const output = this.#output?.read()
+      const input = this.#input?.read(true, time)
+      const output = this.#player && !this.#player.paused ? this.#output?.read() : null
       this.#publish({
         ...this.#snapshot,
         inputBands: input?.bands ?? SILENT_BANDS,
@@ -172,15 +181,37 @@ export class LiveSession {
       if (context.state !== 'running') throw new Error('Allow audio playback in your browser, then try again.')
 
       this.#input = new AudioMeter(context, stream)
+      const player = new window.Audio()
+      player.autoplay = true
+      player.setAttribute('playsinline', '')
+      this.#player = player
+      const playbackFailed = () => {
+        if (generation !== this.#generation || this.#snapshot.status === 'closing' || !player.srcObject) return
+        this.#fail('Audio playback is unavailable. Please start a new call.')
+      }
+      // play() only reports startup failures. A later media error or pause
+      // must not leave a silent call connected and still sending microphone audio.
+      player.onerror = playbackFailed
+      player.onended = playbackFailed
+      player.onpause = () => { if (player.paused) playbackFailed() }
       const peer = new window.RTCPeerConnection()
       this.#peer = peer
-      peer.ontrack = ({ track }) => {
+      peer.ontrack = ({ track, streams }) => {
         if (generation !== this.#generation || track.kind !== 'audio' || this.#snapshot.status === 'closing') return
         try {
           this.#output?.disconnect()
-          // This same graph plays and measures the model's audio. The microphone
-          // analyser is never connected to the speakers.
-          this.#output = new AudioMeter(context, new MediaStream([track]), true)
+          const remoteStream = streams[0] ?? new MediaStream([track])
+          this.#output = new AudioMeter(context, remoteStream)
+          // Let the browser's media player own WebRTC playback. The analyser
+          // only observes that stream and never creates a second audio output.
+          player.srcObject = remoteStream
+          void player.play().catch((error: unknown) => {
+            if (generation !== this.#generation || this.#snapshot.status === 'closing'
+              || player.srcObject !== remoteStream) return
+            this.#fail(error instanceof DOMException && error.name === 'NotAllowedError'
+              ? 'Allow audio playback in your browser, then start a new call.'
+              : 'Audio playback is unavailable. Please start a new call.')
+          })
         } catch {
           this.#fail('Audio playback is unavailable. Please start a new call.')
         }
@@ -239,6 +270,7 @@ export class LiveSession {
       this.#publish({ ...IDLE, status: 'closing' })
       // Silence both sides immediately, retaining the transport until acknowledgment.
       this.#microphone?.getAudioTracks().forEach((track) => { track.enabled = false })
+      this.#player?.pause()
       this.#output?.disconnect()
       this.#output = null
       cancelAnimationFrame(this.#frame)

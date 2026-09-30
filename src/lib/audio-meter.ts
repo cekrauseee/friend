@@ -15,8 +15,10 @@ export class AudioMeter {
   #analyser: AnalyserNode
   #samples: Float32Array<ArrayBuffer>
   #frequencies: Uint8Array<ArrayBuffer>
+  #bands = SILENT_BANDS
+  #lastRead: number | null = null
 
-  constructor(context: AudioContext, stream: MediaStream, playback = false) {
+  constructor(context: AudioContext, stream: MediaStream) {
     this.#analyser = context.createAnalyser()
     this.#analyser.fftSize = 1024
     this.#analyser.smoothingTimeConstant = 0.7
@@ -24,23 +26,31 @@ export class AudioMeter {
     this.#frequencies = new Uint8Array(this.#analyser.frequencyBinCount)
     this.#source = context.createMediaStreamSource(stream)
     this.#source.connect(this.#analyser)
-    if (playback) this.#analyser.connect(context.destination)
   }
 
-  read(includeBands = false) {
+  read(includeBands = false, time = performance.now()) {
     this.#analyser.getFloatTimeDomainData(this.#samples)
     const level = normalizeLevel(this.#samples)
-    if (!includeBands || level === 0) return { level, bands: SILENT_BANDS }
+    if (!includeBands) return { level, bands: SILENT_BANDS }
 
     this.#analyser.getByteFrequencyData(this.#frequencies)
+    const elapsed = this.#lastRead === null ? 1 / 30 : Math.max(0, (time - this.#lastRead) / 1000)
+    this.#lastRead = time
     // Low frequencies at the center, higher frequencies toward the edges.
     // Every bar keeps its position; there is no scrolling history.
     const bands = Array.from({ length: BAND_COUNT }, (_, index) => {
       const distance = Math.abs(index - (BAND_COUNT - 1) / 2)
       const bin = Math.min(this.#frequencies.length - 1, 1 + Math.floor(distance * 3))
-      return Math.min(1, (this.#frequencies[bin] / 255) ** 1.5)
+      const target = level === 0 ? 0 : Math.min(1, (this.#frequencies[bin] / 255) ** 1.5)
+      const current = this.#bands[index]
+      // Follow speech quickly, then settle over a few hundred milliseconds.
+      // Silence changes the target; it must not instantly erase every bar.
+      const duration = target > current ? 0.035 : 0.22
+      const value = target + (current - target) * Math.exp(-elapsed / duration)
+      return value < 0.002 ? 0 : value
     })
-    return { level, bands }
+    this.#bands = bands.every((value) => value === 0) ? SILENT_BANDS : bands
+    return { level, bands: this.#bands }
   }
 
   disconnect() {

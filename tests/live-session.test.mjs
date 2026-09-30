@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { afterEach, beforeEach, mock, test } from 'node:test'
 import { LiveSession } from '../src/lib/live-session.ts'
 
-let contexts, peers, frames, getUserMedia, fetchSession, savedGlobals, nextFrame
+let contexts, peers, players, frames, getUserMedia, fetchSession, savedGlobals, nextFrame
 const sessions = []
 
 function stream() {
@@ -50,6 +50,19 @@ class Peer extends EventTarget {
   event(event) { this.channel.onmessage?.({ data: JSON.stringify(event) }) }
 }
 
+class Player {
+  paused = true
+  srcObject = null
+  play = mock.fn(async () => { this.paused = false })
+  pause = mock.fn(() => {
+    if (this.paused) return
+    this.paused = true
+    this.onpause?.()
+  })
+  constructor() { players.push(this) }
+  setAttribute() {}
+}
+
 function deferred() {
   let resolve
   const promise = new Promise((done) => { resolve = done })
@@ -73,11 +86,11 @@ function answer() {
 }
 
 beforeEach(() => {
-  contexts = []; peers = []; frames = new Map(); nextFrame = 0
+  contexts = []; peers = []; players = []; frames = new Map(); nextFrame = 0
   getUserMedia = mock.fn(async () => stream())
   fetchSession = mock.fn(async () => answer())
   const globals = {
-    window: { isSecureContext: true, AudioContext: Context, RTCPeerConnection: Peer },
+    window: { isSecureContext: true, AudioContext: Context, RTCPeerConnection: Peer, Audio: Player },
     navigator: { mediaDevices: { getUserMedia } },
     MediaStream: class { constructor(tracks) { this.tracks = tracks; this.level = 0 } },
     fetch: fetchSession,
@@ -119,16 +132,19 @@ test('one call separates microphone visualization from played model audio and cl
 
   const remote = stream().track
   peer.receivers.push({ track: remote })
-  peer.ontrack({ track: remote })
+  peer.ontrack({ track: remote, streams: [] })
   contexts[0].analysers[1].stream.level = 0.1
   frame(80)
   assert.ok(session.getSnapshot().outputLevel > 0)
-  assert.equal(contexts[0].analysers[1].connect.mock.calls[0].arguments[0], contexts[0].destination)
+  assert.equal(players[0].play.mock.callCount(), 1)
+  assert.equal(players[0].srcObject.tracks[0], remote)
+  assert.equal(contexts[0].analysers[1].connect.mock.callCount(), 0)
   assert.equal(getUserMedia.mock.callCount(), 1)
 
   session.end()
   assert.equal(session.getSnapshot().status, 'closing')
   assert.equal(mic.track.enabled, false)
+  assert.equal(players[0].paused, true)
   assert.equal(peer.connectionState, 'connected')
   assert.deepEqual(JSON.parse(peer.channel.send.mock.calls[0].arguments[0]), { type: 'session.close' })
   peer.event({ type: 'session.closed', reason: 'close_requested' })
@@ -138,6 +154,68 @@ test('one call separates microphone visualization from played model audio and cl
   assert.equal(contexts[0].state, 'closed')
   assert.equal(peer.connectionState, 'closed')
   assert.equal(frames.size, 0)
+  assert.equal(players[0].srcObject, null)
+})
+
+test('blocked playback is reported and releases the call instead of remaining silently connected', async () => {
+  const session = call()
+  await session.start()
+  peers[0].event({ type: 'session.started' })
+  players[0].play.mock.mockImplementationOnce(async () => {
+    throw new DOMException('Autoplay blocked', 'NotAllowedError')
+  })
+  peers[0].ontrack({ track: stream().track, streams: [] })
+  await Promise.resolve()
+  assert.equal(session.getSnapshot().status, 'error')
+  assert.match(session.getSnapshot().error, /Allow audio playback/)
+  assert.equal(contexts[0].state, 'closed')
+  assert.equal(players[0].srcObject, null)
+})
+
+for (const event of ['error', 'pause', 'ended']) {
+  test(`a player ${event} after playback starts ends the call instead of leaving it silently connected`, async () => {
+    const session = call()
+    await session.start()
+    peers[0].event({ type: 'session.started' })
+    peers[0].ontrack({ track: stream().track, streams: [] })
+    await Promise.resolve()
+    contexts[0].analysers[1].stream.level = 0.1
+    frame(40)
+    assert.ok(session.getSnapshot().outputLevel > 0)
+
+    const player = players[0]
+    if (event === 'pause') player.pause()
+    else player[`on${event}`]?.()
+
+    assert.equal(session.getSnapshot().status, 'error')
+    assert.match(session.getSnapshot().error, /Audio playback/)
+    assert.equal(session.getSnapshot().outputLevel, 0)
+    assert.equal((await getUserMedia.mock.calls[0].result).track.stopped, true)
+    assert.equal(peers[0].connectionState, 'closed')
+    assert.equal(contexts[0].state, 'closed')
+    assert.equal(player.srcObject, null)
+    assert.equal(player.onerror, null)
+    assert.equal(player.onpause, null)
+    assert.equal(player.onended, null)
+  })
+}
+
+test('microphone bars settle gradually after speech instead of disappearing at the silence threshold', async () => {
+  const session = call()
+  await session.start()
+  peers[0].event({ type: 'session.started' })
+  const mic = await getUserMedia.mock.calls[0].result
+  mic.level = 0.1
+  frame(40)
+  const speaking = session.getSnapshot().inputBands[0]
+  mic.level = 0
+  frame(80)
+  const release = session.getSnapshot().inputBands[0]
+  assert.ok(release > 0 && release < speaking)
+  frame(120)
+  assert.ok(session.getSnapshot().inputBands[0] < release)
+  frame(2000)
+  assert.ok(session.getSnapshot().inputBands.every((value) => value === 0))
 })
 
 test('canceling permission stops a late microphone stream without creating a session', async () => {

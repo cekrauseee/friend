@@ -1,8 +1,10 @@
 import { PhoneIcon, PhoneOffIcon } from 'lucide-react'
+import type { Ref } from 'react'
 import { Button } from '@/components/ui/button'
 import type { CallStatus } from '@/lib/live-session'
 
 interface CallButtonProps {
+  ref?: Ref<HTMLButtonElement>
   status: CallStatus
   hasError: boolean
   onClick: () => void
@@ -16,12 +18,13 @@ const labels: Record<CallStatus, string> = {
   error: 'Try calling again',
 }
 
-export function CallButton({ status, hasError, onClick }: CallButtonProps) {
+export function CallButton({ ref, status, hasError, onClick }: CallButtonProps) {
   const active = status === 'connecting' || status === 'connected' || status === 'closing'
 
   return (
     <Button
       type="button"
+      ref={ref}
       variant="call"
       size="call"
       aria-label={labels[status]}

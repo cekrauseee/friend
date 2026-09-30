@@ -13,5 +13,5 @@ export function useLiveSession() {
     }
   }, [session])
 
-  return { ...snapshot, toggle: session.toggle }
+  return { ...snapshot, toggle: session.toggle, dispose: session.dispose }
 }

@@ -8,10 +8,313 @@
     max(1.5rem, env(safe-area-inset-left));
 }
 
+.friend.friend-text-mode {
+  display: block;
+  min-block-size: 100dvh;
+  padding: 0;
+  overflow: hidden;
+}
+
 .friend-stage {
   position: relative;
   inline-size: min(56vw, 32svh, 18rem);
   aspect-ratio: 1;
+}
+
+.friend-voice {
+  inline-size: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.friend-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.875rem;
+}
+
+.friend-chat-button,
+.conversation-icon-button {
+  display: inline-grid;
+  inline-size: 3rem;
+  block-size: 3rem;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: var(--secondary);
+  color: var(--foreground);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.friend-chat-button svg,
+.conversation-icon-button svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  stroke-width: 2;
+}
+
+.friend-chat-button:focus-visible,
+.conversation-icon-button:focus-visible,
+.conversation-turn-error button:focus-visible,
+.conversation-diagram-error button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.text-conversation {
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: 100dvh;
+  min-block-size: 20rem;
+  padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+  padding-block-start: max(1rem, env(safe-area-inset-top));
+}
+
+.conversation-scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+}
+
+.conversation-content,
+.conversation-composer-wrap {
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.conversation-content {
+  padding-block-start: 0.5rem;
+}
+
+.conversation-turn {
+  min-inline-size: 0;
+  margin-block-end: 2.5rem;
+}
+
+.conversation-user-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-block-end: 1.5rem;
+}
+
+.conversation-user-bubble {
+  max-inline-size: 82%;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 1.25rem;
+  background: var(--secondary);
+  color: var(--foreground);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.conversation-assistant,
+.conversation-reply,
+.conversation-markdown {
+  min-inline-size: 0;
+}
+
+.conversation-reply {
+  overflow-wrap: anywhere;
+}
+
+.conversation-markdown {
+  line-height: 1.65;
+}
+
+.conversation-markdown :is(pre, table, [data-streamdown='mermaid'], [data-streamdown='code']) {
+  max-inline-size: 100%;
+  overflow-x: auto;
+}
+
+.conversation-markdown a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.conversation-markdown :is(a, button, summary):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.conversation-compact-orb {
+  display: block;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  margin-block-start: 0.5rem;
+  pointer-events: none;
+}
+
+.conversation-turn-error {
+  margin-block-start: 0.75rem;
+  color: var(--destructive);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.conversation-turn-error p {
+  margin: 0 0 0.5rem;
+}
+
+.conversation-turn-error button,
+.conversation-diagram-error button {
+  min-block-size: 2.75rem;
+  padding-inline: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--secondary);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.conversation-diagram-error {
+  min-inline-size: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+}
+
+.conversation-diagram-error p {
+  margin: 0 0 0.5rem;
+}
+
+.conversation-diagram-error pre {
+  overflow-x: auto;
+  padding: 0.5rem;
+  background: var(--secondary);
+}
+
+[data-conversation-tail] {
+  block-size: 0;
+}
+
+.conversation-footer {
+  flex: 0 0 auto;
+  padding-block: 0.5rem max(1rem, env(safe-area-inset-bottom));
+}
+
+.conversation-jump-slot {
+  display: flex;
+  justify-content: center;
+  margin-block-end: 0.5rem;
+}
+
+.conversation-composer {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 1.5rem;
+  background: var(--secondary);
+}
+
+.conversation-composer:focus-within {
+  border-color: var(--ring);
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.conversation-composer textarea {
+  display: block;
+  inline-size: 100%;
+  min-block-size: 3rem;
+  max-block-size: 12rem;
+  resize: vertical;
+  padding: 0.25rem 0.375rem;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.conversation-composer textarea::placeholder {
+  color: var(--muted-foreground);
+}
+
+.conversation-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 0.25rem;
+}
+
+.conversation-icon-button {
+  inline-size: 2.75rem;
+  block-size: 2.75rem;
+  background: var(--accent);
+}
+
+.conversation-send {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.conversation-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.text-conversation[data-empty='true'] {
+  justify-content: center;
+}
+
+.text-conversation[data-empty='true'] .conversation-scroll {
+  flex: 0 1 0;
+  overflow: hidden;
+}
+
+@media (hover: hover) {
+  .friend-chat-button:hover,
+  .conversation-call:hover,
+  .conversation-turn-error button:hover,
+  .conversation-diagram-error button:hover {
+    background: var(--accent);
+  }
+
+  .conversation-send:not(:disabled):hover {
+    background: var(--primary-hover);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .friend-chat-button,
+  .conversation-icon-button {
+    transition: background-color 180ms ease-out, color 180ms ease-out, scale 180ms ease-out;
+  }
+
+  .friend-chat-button:active,
+  .conversation-icon-button:active {
+    scale: 0.96;
+  }
+}
+
+@media (forced-colors: active) {
+  .friend-chat-button,
+  .conversation-icon-button,
+  .conversation-composer,
+  .conversation-user-bubble,
+  .conversation-turn-error button,
+  .conversation-diagram-error button {
+    border: 1px solid ButtonText;
+  }
+
+  .conversation-composer:focus-within {
+    outline-color: Highlight;
+  }
 }
 
 .friend-orb {

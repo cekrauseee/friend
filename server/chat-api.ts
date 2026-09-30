@@ -8,11 +8,11 @@ const MAX_CONTENT_BYTES = 32 * 1024
 type ChatCode = 'invalid_request' | 'request_too_large' | 'unsupported_media_type'
   | 'method_not_allowed' | 'forbidden_origin' | 'not_configured'
   | 'rate_limited' | 'access_denied' | 'upstream_error' | 'incomplete_response'
-type ChatMessage = { role: 'user' | 'assistant'; content: string }
-type ChatEvent = { type: 'delta'; text: string } | { type: 'done' }
+export type ChatMessage = { role: 'user' | 'assistant'; content: string }
+export type ChatEvent = { type: 'delta'; text: string } | { type: 'done' }
   | { type: 'error'; code: ChatCode; message: string }
 
-class ChatError extends Error {
+export class ChatError extends Error {
   readonly status: number
   readonly code: ChatCode
 
@@ -36,7 +36,7 @@ const errors = {
   incomplete: () => new ChatError(502, 'incomplete_response', 'Could not complete the reply. Please try again.'),
 }
 
-function isLocalOrigin(request: IncomingMessage) {
+export function isLocalOrigin(request: IncomingMessage) {
   try {
     const origin = new URL(request.headers.origin ?? '')
     return ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
@@ -47,7 +47,7 @@ function isLocalOrigin(request: IncomingMessage) {
   }
 }
 
-function replyError(response: ServerResponse, error: ChatError) {
+export function replyError(response: ServerResponse, error: ChatError) {
   if (response.destroyed || response.writableEnded) return
   response.writeHead(error.status, {
     'Content-Type': 'application/json; charset=utf-8',
@@ -136,7 +136,9 @@ function writeEvent(response: ServerResponse, signal: AbortSignal, event: ChatEv
 }
 
 /** Local, stateless text endpoint. The browser sends only accepted turns. */
-export function createChatApi(apiKey: string | undefined, client?: OpenAI) {
+export type ChatProvider = (messages: ChatMessage[], signal: AbortSignal) => AsyncIterable<ChatEvent>
+
+export function createChatApi(apiKey: string | undefined, client?: OpenAI, provider?: ChatProvider) {
   const openai = client ?? (apiKey
     ? new OpenAI({ apiKey, maxRetries: 0, timeout: 120_000 })
     : null)
@@ -144,7 +146,7 @@ export function createChatApi(apiKey: string | undefined, client?: OpenAI) {
   return async (request: IncomingMessage, response: ServerResponse) => {
     if (request.method !== 'POST') return replyError(response, errors.method())
     if (!isLocalOrigin(request)) return replyError(response, errors.origin())
-    if (!openai) return replyError(response, errors.key())
+    if (!openai && !provider) return replyError(response, errors.key())
 
     const controller = new AbortController()
     const onClose = () => { if (!response.writableEnded) controller.abort() }
@@ -163,7 +165,19 @@ export function createChatApi(apiKey: string | undefined, client?: OpenAI) {
     try {
       const messages = await readMessages(request)
       if (controller.signal.aborted) return
-      const stream = await openai.responses.create({
+      if (provider) {
+        for await (const event of provider(messages, controller.signal)) {
+          if (controller.signal.aborted || terminal) return
+          if (!streaming) {
+            response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' })
+            streaming = true
+          }
+          if (event.type === 'delta') await writeEvent(response, controller.signal, event)
+          else { await sendTerminal(event); return }
+        }
+        throw errors.incomplete()
+      }
+      const stream = await openai!.responses.create({
         model: 'gpt-6-luna',
         reasoning: { effort: 'none' },
         tools: [],

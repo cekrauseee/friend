@@ -31,7 +31,7 @@
   padding-block-end: max(1.5rem, env(safe-area-inset-bottom));
 }
 
-[data-variant='microphone'] {
+[data-variant='call'] {
   position: relative;
   border: 0;
   border-radius: 50%;
@@ -42,37 +42,37 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-[data-variant='microphone']:focus-visible {
+[data-variant='call']:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 4px;
   box-shadow: none;
 }
 
-[data-variant='microphone'][data-state='requesting'] {
+[data-variant='call'][data-state='connecting'] {
   background: var(--accent);
   color: var(--muted-foreground);
 }
 
-[data-variant='microphone'][aria-pressed='true'] {
-  background: var(--primary);
-  color: var(--primary-foreground);
+[data-variant='call'][data-active='true'] {
+  background: var(--call-end);
+  color: var(--call-end-foreground);
 }
 
-[data-variant='microphone'] svg {
+[data-variant='call'] svg {
   position: absolute;
   stroke-width: 2;
 }
 
-[data-variant='microphone'] [data-icon='microphone-on'],
-[data-variant='microphone'][aria-pressed='true'] [data-icon='microphone-off'] {
+[data-variant='call'] [data-icon='call-end'],
+[data-variant='call'][data-active='true'] [data-icon='call-start'] {
   opacity: 0;
 }
 
-[data-variant='microphone'][aria-pressed='true'] [data-icon='microphone-on'] {
+[data-variant='call'][data-active='true'] [data-icon='call-end'] {
   opacity: 1;
 }
 
-.microphone-error {
+.call-error {
   margin: 0;
   color: var(--muted-foreground);
   font-size: 0.875rem;
@@ -83,36 +83,45 @@
 }
 
 @media (hover: hover) {
-  [data-variant='microphone']:hover {
+  [data-variant='call']:hover {
     background: var(--accent);
   }
 
-  [data-variant='microphone'][aria-pressed='true']:hover {
-    background: var(--primary-hover);
+  [data-variant='call'][data-active='true']:hover {
+    background: var(--call-end-hover);
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  [data-variant='microphone'] {
+  [data-variant='call'] {
     transition: background-color 180ms ease-out, color 180ms ease-out,
       scale 180ms ease-out;
   }
 
-  [data-variant='microphone']:active {
+  [data-variant='call']:active {
     scale: 0.96;
   }
 
-  [data-variant='microphone'] svg {
+  [data-variant='call'] svg {
     transition: opacity 180ms ease-out;
   }
 }
 
 @media (forced-colors: active) {
-  [data-variant='microphone'] {
+  [data-variant='call'] {
     border: 1px solid ButtonText;
   }
 
-  [data-variant='microphone']:focus-visible {
+  [data-variant='call']:focus-visible {
     outline-color: Highlight;
   }
+}
+
+.microphone-waveform {
+  inline-size: 12rem;
+  max-inline-size: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+  background: var(--secondary);
+  color: var(--foreground);
 }

@@ -1,49 +1,70 @@
 # Friend
 
-A minimal voice interface built with React, TypeScript, and Vite. The current version is a local microphone demo: a small pixel orb sits in the center of a charcoal screen, with a single microphone button below it.
+A minimal voice companion built with React, TypeScript, and Vite. Start a call, speak naturally, and hear the model respond. A small pixel orb reacts to the model's audio; fixed waveform bars react to your microphone.
 
-The interface uses neutral colors, solid controls, and restrained motion. There is no visible copy in its normal state. Accessible labels and contextual errors are in English.
+The interface uses a charcoal background, solid controls, and restrained motion. The call button turns red when it ends or cancels a call. There is no visible copy in normal operation. Accessible labels and contextual errors are in English.
 
-## Run
+## Run locally
 
 Use Node.js 22.18+ and pnpm.
 
 ```sh
 pnpm install
+cp .env.example .env.local
+```
+
+Set `OPENAI_API_KEY` in `.env.local` to an existing OpenAI project key with GPT-Live access, then run:
+
+```sh
 pnpm dev
 ```
 
-Open the localhost URL printed by Vite. Click the microphone button and grant browser permission. The orb responds to your voice's volume. Click again to stop. A second click also cancels a pending permission request.
+Open the localhost URL printed by Vite. Select the phone button and allow microphone access. When connected, speak normally. Select the red button to end the call. Selecting it while connecting cancels setup.
 
-Microphone access requires localhost or HTTPS. Rendering requires WebGL. Browser errors appear in English only when needed; the normal interface has no visible text.
+The key is read only by the local server. Never use a `VITE_` prefix for it; that would expose it to the browser. Environment files are ignored by Git. Restart the development server after changing the key.
 
-## Audio
+Microphone access requires a supported browser on localhost or HTTPS. The orb requires WebGL. OpenAI API access and usage are billed to the configured project.
 
-Audio stays in the browser. There is no recording, transcription, playback, network upload, or agent backend in this version. A Web Audio analyser measures speech energy and drives the orb's live volume and motion parameters.
+## OpenAI configuration
 
-Tracks, audio nodes, and the audio context are released on stop, page exit, or component unmount. Late permission responses are discarded after cancellation. The orb respects the system's reduced-motion setting.
+The server configures the session in [`server/session-config.ts`](server/session-config.ts):
 
-## Orb component
+| Setting | Value |
+| --- | --- |
+| Voice model | `gpt-live-1` |
+| Responses backend | `gpt-6-luna` |
+| Backend reasoning effort | `none` |
+| Tools | None |
+| Tool choice | `none` |
 
-Installed with the requested registry command:
+GPT-Live handles the spoken conversation and delegates to Luna when needed. Voice, instructions, and other model settings use OpenAI's defaults. There are no custom tools, system prompts, model selectors, or advanced settings in the interface.
 
-```sh
-pnpm dlx shadcn@latest add zzzzshawn/orbkit/shdr-14
-```
+## Connection and audio
 
-Source: [Orbkit](https://github.com/zzzzshawn/orbkit). The shader and renderer are in `src/components/ui/`. Unused gallery exports were removed to keep these files compatible with Vite's Fast Refresh checks; shader behavior is unchanged.
+The browser captures the microphone once and creates a WebRTC connection. A local `POST /api/session` endpoint exchanges its SDP offer with OpenAI using the official TypeScript SDK. The API key and model configuration stay on the server. The browser receives only the session ID and SDP answer.
+
+Microphone audio travels to OpenAI over the WebRTC media track. A local analyser supplies the waveform's frequency bands without recording or scrolling history. A separate Web Audio graph plays the remote model track and measures it for the orb; microphone input never drives the orb or plays through the speakers.
+
+The call becomes ready on `session.started`. Ending it silences both sides, sends `session.close`, and waits for `session.closed` before releasing the connection. A bounded timeout releases resources if finalization cannot be confirmed. Canceled startup, denied permissions, disconnects, unmounts, and page exit also release local resources. Leaving the page closes the transport immediately and cannot wait for final acknowledgment.
+
+Friend does not persist audio or transcripts and does not request OpenAI session storage. Audio is sent to OpenAI for the conversation and remains subject to the configured project's API data policy.
 
 ## Project structure
 
-- `src/App.tsx` composes the orb and microphone control.
-- `src/App.css` defines the page layout and interaction states.
-- `src/index.css` contains the shared visual tokens.
-- `src/hooks/use-microphone.ts` connects React to the audio lifecycle.
-- `src/lib/microphone.ts` owns microphone permission, audio analysis, cancellation, and cleanup.
-- `src/components/ui/` contains the adapted Orbkit and shadcn components.
-- `tests/microphone.test.mjs` exercises audio behavior with browser API test doubles.
+- `src/App.tsx` composes the interface.
+- `src/components/friend-orb.tsx` visualizes model audio.
+- `src/components/call-button.tsx` presents call actions.
+- `src/components/microphone-waveform.tsx` presents the fixed microphone waveform.
+- `src/hooks/use-live-session.ts` connects React to the session lifecycle.
+- `src/lib/live-session.ts` owns WebRTC, events, cancellation, and cleanup.
+- `src/lib/audio-meter.ts` analyses input and output streams separately.
+- `src/lib/webrtc.ts` waits for ICE gathering.
+- `server/session-config.ts` holds the model configuration.
+- `server/live-api.ts` validates local requests and calls the OpenAI SDK.
+- `server/vite-plugin.ts` mounts the API in development and preview.
+- `src/components/ui/` contains the adapted source components.
 
-Keep audio resource management outside UI components. The microphone must only start after a user action and must release all resources when stopped. Do not commit local environment files or credentials.
+Keep session and audio resource management outside the UI components.
 
 ## Checks
 
@@ -53,6 +74,46 @@ pnpm lint
 pnpm build
 ```
 
-The Node.js tests cover signal normalization, microphone lifecycle, permission denial and retry, cancellation, stale permission responses, disconnection, startup failure, and unsupported environments using audio API test doubles. Real microphone and visual browser checks are separate manual checks.
+Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, and OpenAI requests. They cover only the core session contract, separation of input/output audio, cancellation, cleanup, and necessary request/error handling. They make no live API calls.
 
-Third-party source licenses are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+A real voice conversation and browser playback have not been validated because no OpenAI API key was available during implementation.
+
+## Build and preview
+
+```sh
+pnpm build
+pnpm preview
+```
+
+Preview serves the production frontend with the same local API. The generated `dist/` directory alone cannot create voice sessions. This project currently supports local use: session creation accepts matching localhost origins. Hosting for other users requires a trusted backend with application authentication and request controls; this repository does not include a production deployment.
+
+## Source components
+
+The orb is [Orbkit SHDR-14](https://github.com/zzzzshawn/orbkit), installed with:
+
+```sh
+pnpm dlx shadcn@latest add zzzzshawn/orbkit/shdr-14
+```
+
+The waveform comes from [ElevenLabs UI](https://github.com/elevenlabs/ui). Its documented installation is:
+
+```sh
+pnpm dlx @elevenlabs/cli@latest components add waveform
+```
+
+The hosted registry was rate-limited during setup, so the identical published registry item was installed from the official GitHub repository:
+
+```sh
+pnpm dlx shadcn@latest add https://raw.githubusercontent.com/elevenlabs/ui/main/apps/www/public/r/waveform.json
+```
+
+Only the base `Waveform` renderer is retained. It displays live frequency data at fixed positions; the scrolling, synthetic, recording, and additional microphone-capture variants are omitted. Orbkit's unused gallery exports were removed for Vite Fast Refresh compatibility.
+
+Original source licenses are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## API references
+
+- [GPT-Live WebRTC connection](https://developers.openai.com/api/docs/guides/voice-webrtc?api=live)
+- [Responses delegation and supported configuration](https://developers.openai.com/api/docs/guides/live-delegation)
+- [GPT-6 Luna reasoning settings](https://developers.openai.com/api/docs/models/gpt-6-luna)
+- [Session lifecycle and graceful close](https://developers.openai.com/api/docs/guides/live-conversations)

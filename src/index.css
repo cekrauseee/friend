@@ -26,6 +26,9 @@
   --ring: var(--primary);
   --destructive: oklch(0.75 0.13 24);
   --radius: 0.75rem;
+  --call-end: oklch(0.54 0.2 26);
+  --call-end-hover: oklch(0.59 0.2 26);
+  --call-end-foreground: oklch(1 0 0);
 }
 
 @theme inline {

@@ -1,6 +1,6 @@
 # Friend
 
-A minimal voice companion built with React, TypeScript, and Vite. Start a call, speak naturally, and hear the model respond. A small pixel orb reacts to the model's audio; fixed waveform bars react to your microphone.
+A minimal voice and text companion built with React, TypeScript, and Vite. Start a call, speak naturally, and hear the model respond. A small pixel orb reacts to the model's audio; fixed waveform bars react to your microphone.
 
 The interface uses a charcoal background, solid controls, and restrained motion. The call button turns red when it ends or cancels a call. There is no visible copy in normal operation. Accessible labels and contextual errors are in English.
 
@@ -15,7 +15,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-Set `OPENAI_API_KEY` in `.env.local` to an existing OpenAI project key with GPT-Live access, then run:
+For voice calls, set `OPENAI_API_KEY` in `.env.local` to an existing OpenAI project key with GPT-Live access. Text chat in development uses your ChatGPT account through Codex CLI 0.156.1 on `PATH`; it does not need an API key. Then run:
 
 ```sh
 pnpm dev
@@ -26,6 +26,24 @@ Open the localhost URL printed by Vite. Select the phone button and allow microp
 The key is read only by the local server. Never use a `VITE_` prefix for it; that would expose it to the browser. Environment files are ignored by Git. Restart the development server after changing the key.
 
 Microphone access requires a supported browser on localhost or HTTPS. The orb requires WebGL. OpenAI API access and usage are billed to the configured project.
+
+## Text chat in development
+
+The text conversation button checks access before opening the conversation. If you have not signed in, it opens ChatGPT sign-in in another window. Allow pop-ups for localhost. The main screen remains visible until the local server confirms a ChatGPT account. Refusal, cancellation, timeout, or a failed local connection shows an error beside the button. Select the button again during login to cancel; select it after an error to retry. Closing the sign-in window may only be detected by the three-minute timeout because authentication pages can sever browser window references.
+
+Use `FRIEND_TEXT_PROVIDER=codex` (the development default) or `FRIEND_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. Voice always uses that key. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `FRIEND_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
+
+The Codex integration requires **Codex CLI 0.156.1**. This version is checked during initialization because environment isolation is verified against its protocol; other versions fail closed. Install that version through the official [Codex CLI instructions](https://learn.chatgpt.com/docs/cli). After upgrading the adapter, re-run the local CLI protocol test before changing the supported version.
+
+Friend starts one local `codex app-server` process on demand. It uses Codex-managed ChatGPT authentication and a separate `CODEX_HOME` at `~/.local/share/friend/codex`, so signing in to the desktop app or another CLI profile does not sign you in here. Codex stores its managed credentials there; do not commit or share that directory. To sign out, stop Vite and run `CODEX_HOME="$HOME/.local/share/friend/codex" codex logout`. The child inherits only `PATH` and this dedicated `CODEX_HOME`. Tokens and raw upstream errors never reach the browser.
+
+Every reply requests `gpt-6-luna` with reasoning `none`. Account authentication permits entering the text view; it does not prove access to the model. Only a completed inference proves model access for that request. Model or subscription limits appear as reply errors, without changing the model or provider. Live account access has not been verified by the automated tests.
+
+Each request starts an ephemeral Codex thread and passes the browser's accepted message history as a JSON conversation. Completed user/assistant pairs supply context; failed partial replies are excluded by the existing conversation store. No thread identifier or token is sent to the browser. The thread is unsubscribed after completion, failure, or cancellation. The app interrupts active turns when the browser leaves or cancels a reply. Conversation state remains in browser memory; the app does not create saved Codex chats.
+
+Codex is an agent protocol, so its tool contract differs from the API's `tools: []` / `tool_choice: none`. Friend supplies `environments: []`, empty dynamic tools and workspace roots, disables agents, apps, plugins, shell and other capabilities, and uses read-only access with approvals set to never. With the supported CLI, no shell, file editing, browser, MCP or subagent tool is exposed. Codex retains internal V8 orchestration (without filesystem/network access), clock/skill helpers and input requests. Friend rejects server-initiated requests and never asks the browser to approve or execute tools. The CLI test verifies the actual outbound tool catalog against a local mock endpoint; it performs no OpenAI inference or login.
+
+This is a localhost development integration using [Codex app-server authentication](https://learn.chatgpt.com/docs/app-server). Review the official [ChatGPT plan integration guidance](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server) before extending it to distribution or hosted use.
 
 ## OpenAI configuration
 
@@ -39,7 +57,7 @@ The server configures the session in [`server/session-config.ts`](server/session
 | Tools | None |
 | Tool choice | `none` |
 
-GPT-Live handles the spoken conversation and delegates to Luna when needed. Voice, instructions, and other model settings use OpenAI's defaults. There are no custom tools, system prompts, model selectors, or advanced settings in the interface.
+GPT-Live handles the spoken conversation and delegates to Luna when needed. Voice, instructions, and other model settings use OpenAI's defaults. The voice/API paths have no custom tools or system prompts. The Codex adapter supplies a short instruction to continue the provided text conversation. There are no model selectors or advanced settings in the interface.
 
 ## Connection and audio
 
@@ -63,7 +81,10 @@ Friend does not persist audio or transcripts and does not request OpenAI session
 - `src/lib/webrtc.ts` waits for ICE gathering.
 - `server/session-config.ts` holds the model configuration.
 - `server/live-api.ts` validates local requests and calls the OpenAI SDK.
-- `server/vite-plugin.ts` mounts the API in development and preview.
+- `server/codex-process.ts` manages the isolated Codex stdio process.
+- `server/codex-provider.ts` owns ChatGPT authentication and text streaming.
+- `src/lib/text-access.ts` gates text-mode entry on confirmed access.
+- `server/vite-plugin.ts` selects the local text provider and mounts the routes.
 - `src/components/ui/` contains the adapted source components.
 
 Keep session and audio resource management outside the UI components.
@@ -80,14 +101,16 @@ Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, 
 
 Unit tests do not verify audible browser playback. A real voice conversation is a separate manual check with a configured OpenAI API key.
 
+The test suite uses simulated authentication and inference. If Codex CLI 0.156.1 is installed, it also runs a local HTTP protocol test; otherwise that test is skipped. No test requires a ChatGPT account or an API key. Live login, real model entitlement, popup behavior and visual QA require a separate manual check.
+
 ## Build and preview
 
 ```sh
 pnpm build
-pnpm preview
+FRIEND_TEXT_PROVIDER=api pnpm preview
 ```
 
-Preview serves the production frontend with the same local API. The generated `dist/` directory alone cannot create voice sessions. This project currently supports local use: session creation accepts matching localhost origins. Hosting for other users requires a trusted backend with application authentication and request controls; this repository does not include a production deployment.
+Preview serves the production frontend with the local voice and text API-key endpoints. The generated `dist/` directory alone cannot create voice sessions. This project currently supports local use: session creation accepts matching localhost origins. Hosting for other users requires a trusted backend with application authentication and request controls; this repository does not include a production deployment.
 
 ## Source components
 

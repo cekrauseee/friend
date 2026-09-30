@@ -13,6 +13,8 @@ interface VoiceStageProps {
   outputLevel: number
   onToggleCall: () => void
   onEnterText: () => void
+  textAccessPending?: boolean
+  textAccessMessage?: string | null
   focusCall?: boolean
 }
 
@@ -24,6 +26,8 @@ export function VoiceStage({
   onToggleCall,
   onEnterText,
   focusCall = false,
+  textAccessPending = false,
+  textAccessMessage = null,
 }: VoiceStageProps) {
   const callRef = useRef<HTMLButtonElement>(null)
   const reducedMotion = useReducedMotion()
@@ -52,12 +56,13 @@ export function VoiceStage({
         <div className="friend-controls">
           <div className="friend-action-row">
             <CallButton ref={callRef} status={status} hasError={Boolean(error)} onClick={onToggleCall} />
-            <button type="button" className="friend-chat-button" aria-label="Open text chat" onClick={onEnterText}>
+            <button type="button" className="friend-chat-button" aria-label={textAccessPending ? 'Cancel text chat sign-in' : 'Open text chat'} aria-describedby="text-access-status" aria-busy={textAccessPending} onClick={onEnterText}>
               <MessageCircleIcon aria-hidden="true" />
             </button>
           </div>
           {active ? <MicrophoneWaveform bands={inputBands} /> : null}
           <p id="call-error" className="call-error" role="status">{error}</p>
+          <p id="text-access-status" className="call-error" role="status">{textAccessMessage}</p>
           <span className="sr-only" role="status">{announcement}</span>
         </div>
       </div>

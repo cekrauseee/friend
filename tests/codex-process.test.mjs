@@ -1,15 +1,28 @@
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { PassThrough, Writable } from 'node:stream'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { spawn, spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import { createCodexProcess } from '../server/codex-process.ts'
+import { createCodexProcess, resolveCodexAuthHome } from '../server/codex-process.ts'
 import { createCodexProvider } from '../server/codex-provider.ts'
 const tick = () => new Promise((r) => setImmediate(r))
+
+test('new sign-in profiles use Dot while existing profiles remain available after renaming', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'dot-auth-home-test-'))
+  try {
+    const current = join(base, 'dot', 'codex')
+    const previous = join(base, 'friend', 'codex')
+    assert.equal(await resolveCodexAuthHome(base), current)
+    await mkdir(previous, { recursive: true })
+    assert.equal(await resolveCodexAuthHome(base), previous)
+    await mkdir(current, { recursive: true })
+    assert.equal(await resolveCodexAuthHome(base), current)
+  } finally { await rm(base, { recursive: true, force: true }) }
+})
 
 function fakeChild(onMessage) {
   const child = new EventEmitter()
@@ -21,11 +34,11 @@ function fakeChild(onMessage) {
 }
 
 test('stdio initialization, split frames, request correlation, denied server requests and isolated environment', async () => {
-  const home = await mkdtemp(join(tmpdir(), 'friend-rpc-test-'))
+  const home = await mkdtemp(join(tmpdir(), 'dot-rpc-test-'))
   const sent = []; const notifications = []; let launched
   const child = fakeChild((message, process) => {
     sent.push(message)
-    if (message.method === 'initialize') process.send({ id: message.id, result: { userAgent: 'friend/0.156.1 (test)' } })
+    if (message.method === 'initialize') process.send({ id: message.id, result: { userAgent: 'dot/0.156.1 (test)' } })
   })
   const rpc = createCodexProcess({ authHome: home, launch: (...args) => { launched = args; return child } })
   rpc.subscribe((message) => notifications.push(message))
@@ -42,7 +55,7 @@ test('stdio initialization, split frames, request correlation, denied server req
     assert.deepEqual(await one, { account: null }); assert.deepEqual(await two, { data: [] })
     child.send({ id: 'server-1', method: 'item/commandExecution/requestApproval', params: { threadId: 'thread' } })
     assert.equal(sent.at(-1).error.code, -32601)
-    assert.ok(notifications.some((n) => n.method === 'friend/request/rejected'))
+    assert.ok(notifications.some((n) => n.method === 'dot/request/rejected'))
     assert.deepEqual(Object.keys(launched[2].env).sort(), ['CODEX_HOME', 'PATH'])
     assert.equal(launched[2].env.CODEX_HOME, home)
     assert.ok(launched[2].cwd.startsWith(tmpdir()))
@@ -54,8 +67,8 @@ test('stdio initialization, split frames, request correlation, denied server req
 
 test('unknown CLI versions and missing responses fail closed', async () => {
   for (const version of ['0.999.0', null]) {
-    const home = await mkdtemp(join(tmpdir(), 'friend-rpc-test-'))
-    const child = fakeChild((m, process) => { if (version && m.method === 'initialize') process.send({ id: m.id, result: { userAgent: `friend/${version} (test)` } }) })
+    const home = await mkdtemp(join(tmpdir(), 'dot-rpc-test-'))
+    const child = fakeChild((m, process) => { if (version && m.method === 'initialize') process.send({ id: m.id, result: { userAgent: `dot/${version} (test)` } }) })
     const rpc = createCodexProcess({ authHome: home, launch: () => child, requestTimeoutMs: 5 })
     try { await assert.rejects(rpc.request('account/read', {})); assert.equal(child.killed, true) }
     finally { rpc.close(); await rm(home, { recursive: true, force: true }) }
@@ -64,7 +77,7 @@ test('unknown CLI versions and missing responses fail closed', async () => {
 
 const installed = spawnSync('codex', ['--version'], { encoding: 'utf8' }).stdout?.trim() === 'codex-cli 0.156.1'
 test('installed CLI emits fixed inference settings without executable environment tools (local mock only)', { skip: !installed, timeout: 15_000 }, async () => {
-  const home = await mkdtemp(join(tmpdir(), 'friend-cli-test-'))
+  const home = await mkdtemp(join(tmpdir(), 'dot-cli-test-'))
   let captured
   const server = createServer(async (req, res) => {
     let body = ''; for await (const chunk of req) body += chunk

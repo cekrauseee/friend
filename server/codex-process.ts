@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -30,6 +30,17 @@ export const codexArgs = ['app-server', '--listen', 'stdio://',
   ...disabledFeatures.flatMap((feature) => ['--disable', feature]),
 ]
 
+/** Reuse an existing local sign-in; new profiles use the current product name. */
+export async function resolveCodexAuthHome(base = join(homedir(), '.local', 'share')) {
+  const current = join(base, 'dot', 'codex')
+  const previous = join(base, 'friend', 'codex')
+  for (const directory of [current, previous]) {
+    try { await access(directory); return directory }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
+  }
+  return current
+}
+
 /** Lazy, isolated stdio process. Never inherits API keys or the caller's CODEX_HOME. */
 export function createCodexProcess(options: { launch?: typeof spawn; authHome?: string; requestTimeoutMs?: number } = {}): CodexRpc {
   let child: ChildProcessWithoutNullStreams | undefined
@@ -43,7 +54,7 @@ export function createCodexProcess(options: { launch?: typeof spawn; authHome?: 
   const fail = () => {
     for (const entry of pending.values()) { clearTimeout(entry.timer); entry.reject(new Error('Codex unavailable')) }
     pending.clear()
-    emit({ method: 'friend/process/error' })
+    emit({ method: 'dot/process/error' })
   }
   const write = (message: RpcMessage) => {
     if (!child || child.killed || !child.stdin.writable) throw new Error('Codex unavailable')
@@ -56,9 +67,9 @@ export function createCodexProcess(options: { launch?: typeof spawn; authHome?: 
     try { write({ id, method, params }) } catch { clearTimeout(timer); pending.delete(id); reject(new Error('Codex unavailable')) }
   })
   const start = async () => {
-    const runtimeDirectory = await mkdtemp(join(tmpdir(), 'friend-codex-'))
+    const runtimeDirectory = await mkdtemp(join(tmpdir(), 'dot-codex-'))
     directory = runtimeDirectory
-    const authHome = options.authHome ?? join(homedir(), '.local', 'share', 'friend', 'codex')
+    const authHome = options.authHome ?? await resolveCodexAuthHome()
     await mkdir(authHome, { recursive: true, mode: 0o700 })
     if (closed) { await rm(runtimeDirectory, { recursive: true, force: true }); throw new Error('Codex closed') }
     child = (options.launch ?? spawn)('codex', codexArgs, {
@@ -90,7 +101,7 @@ export function createCodexProcess(options: { launch?: typeof spawn; authHome?: 
         if (message.method && message.id !== undefined) {
           // No browser approval, tool execution, input or token refresh is delegated.
           try { write({ id: message.id, error: { code: -32601, message: 'Client requests are disabled.' } }) } catch { fail() }
-          emit({ method: 'friend/request/rejected', params: message.params })
+          emit({ method: 'dot/request/rejected', params: message.params })
         } else if (typeof message.id === 'number') {
           const entry = pending.get(message.id)
           if (!entry) continue
@@ -106,9 +117,9 @@ export function createCodexProcess(options: { launch?: typeof spawn; authHome?: 
     child.stdin.on('error', dispose)
     child.on('error', dispose)
     child.on('exit', dispose)
-    const initialized = await request('initialize', { clientInfo: { name: 'friend', title: 'Friend', version: '0.0.0' }, capabilities: { experimentalApi: true } }).catch((error: unknown) => { dispose(); throw error })
+    const initialized = await request('initialize', { clientInfo: { name: 'dot', title: 'Dot', version: '0.0.0' }, capabilities: { experimentalApi: true } }).catch((error: unknown) => { dispose(); throw error })
     if (!initialized || typeof initialized !== 'object' || !('userAgent' in initialized)
-      || typeof initialized.userAgent !== 'string' || !initialized.userAgent.startsWith('friend/0.156.1 ')) {
+      || typeof initialized.userAgent !== 'string' || !initialized.userAgent.startsWith('dot/0.156.1 ')) {
       dispose(); throw new Error('Unsupported Codex CLI version')
     }
     write({ method: 'initialized' })

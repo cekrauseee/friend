@@ -36,7 +36,7 @@ export function createCodexProvider(rpc: CodexRpc = createCodexProcess(), option
   }
   const unsubscribe = rpc.subscribe((message) => {
     const params = object(message.params)
-    if (message.method === 'friend/process/error') finishLogin('failed')
+    if (message.method === 'dot/process/error') finishLogin('failed')
     if (message.method === 'account/login/completed' && params.loginId === login?.id) {
       if (params.success === true) void account().then((valid) => finishLogin(valid ? 'succeeded' : 'failed'), () => finishLogin('failed'))
       else finishLogin('failed')
@@ -83,9 +83,9 @@ export function createCodexProvider(rpc: CodexRpc = createCodexProcess(), option
     let timedOut = false
     const push = (message: RpcMessage) => { queue.push(message); wake?.(); wake = undefined }
     const stop = rpc.subscribe((message) => {
-      if (message.method === 'friend/process/error' || message.method === 'friend/request/rejected' || (threadId && message.params?.threadId === threadId)) push(message)
+      if (message.method === 'dot/process/error' || message.method === 'dot/request/rejected' || (threadId && message.params?.threadId === threadId)) push(message)
     })
-    const abort = () => push({ method: 'friend/abort' })
+    const abort = () => push({ method: 'dot/abort' })
     signal.addEventListener('abort', abort, { once: true })
     const timer = setTimeout(() => { timedOut = true; abort() }, options.turnTimeoutMs ?? 120_000)
     try {
@@ -94,7 +94,7 @@ export function createCodexProvider(rpc: CodexRpc = createCodexProcess(), option
         ephemeral: true, environments: [], dynamicTools: [], runtimeWorkspaceRoots: [],
         approvalPolicy: 'never', sandbox: 'read-only',
         config: { model_reasoning_effort: 'none', 'agents.enabled': false },
-        baseInstructions: 'You are Friend, a text conversation assistant. The user supplies a JSON conversation with user and assistant messages. Continue it by answering the final user message. Return only your reply as plain text or Markdown. Do not use tools.',
+        baseInstructions: 'You are Dot, a text conversation assistant. The user supplies a JSON conversation with user and assistant messages. Continue it by answering the final user message. Return only your reply as plain text or Markdown. Do not use tools.',
       }))
       threadId = object(started.thread).id as string
       if (typeof threadId !== 'string' || started.model !== 'gpt-6-luna' || started.reasoningEffort !== 'none') throw replyFailure()
@@ -111,8 +111,8 @@ export function createCodexProvider(rpc: CodexRpc = createCodexProcess(), option
         if (!queue.length) await new Promise<void>((resolve) => { wake = resolve })
         const message = queue.shift()
         if (!message) continue
-        if (message.method === 'friend/abort') { if (timedOut) throw replyFailure(); return }
-        if (message.method === 'friend/process/error' || message.method === 'friend/request/rejected') throw replyFailure()
+        if (message.method === 'dot/abort') { if (timedOut) throw replyFailure(); return }
+        if (message.method === 'dot/process/error' || message.method === 'dot/request/rejected') throw replyFailure()
         const params = object(message.params)
         if (params.turnId && params.turnId !== turnId) continue
         if (message.method === 'item/agentMessage/delta' && typeof params.delta === 'string' && params.delta) {

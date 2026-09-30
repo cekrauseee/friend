@@ -1,8 +1,8 @@
-# Friend
+# Dot
 
 A minimal voice and text companion built with React, TypeScript, and Vite. Start a call, speak naturally, and hear the model respond. A small pixel orb reacts to the model's audio; fixed waveform bars react to your microphone.
 
-The interface uses a charcoal background, solid controls, and restrained motion. The call button turns red when it ends or cancels a call. There is no visible copy in normal operation. Accessible labels and contextual errors are in English.
+The interface follows the system’s light or dark appearance, with neutral surfaces, solid controls, and restrained motion. The call button turns red when it ends or cancels a call. Text replies render in a shared transcript; controls, accessible labels, and contextual errors are in English.
 
 The [portfolio case study](.portfolio/project.md) documents the interaction, architecture, and current scope.
 
@@ -29,19 +29,29 @@ Microphone access requires a supported browser on localhost or HTTPS. The orb re
 
 ## Text chat in development
 
-The text conversation button checks access before opening the conversation. If you have not signed in, it opens ChatGPT sign-in in another window. Allow pop-ups for localhost. The main screen remains visible until the local server confirms a ChatGPT account. Refusal, cancellation, timeout, or a failed local connection shows an error beside the button. Select the button again during login to cancel; select it after an error to retry. Closing the sign-in window may only be detected by the three-minute timeout because authentication pages can sever browser window references.
+The app opens on a shared conversation screen. Startup checks server-confirmed authentication behind a centered spinner. With the Codex provider, a shadcn AlertDialog handles sign-in when needed; its action opens the ChatGPT authentication popup and waits for the server to confirm success. Existing sessions proceed immediately. Refusal, cancellation, timeout, and connection errors keep the dialog available for retry. Allow pop-ups for localhost. Closing the authentication window may only be detected by the three-minute timeout because authentication pages can sever browser window references.
 
-Use `FRIEND_TEXT_PROVIDER=codex` (the development default) or `FRIEND_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. Voice always uses that key. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `FRIEND_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
+Selecting chat opens the composer. Typing anywhere outside another editable field or a modal opens and focuses it without losing the first character. Control/Command+A and V target the composer; Control+Backspace deletes the preceding word and Command+Backspace deletes the current line prefix. Existing fields, native control activation, browser shortcuts, and active voice calls retain their own keyboard behavior. The composer uses “Ask anything”, expands for multiline drafts, and stays open once messages exist. During calls, chat yields to a 36px waveform and the call control. Voice errors dismiss after six seconds or a state change.
+
+User messages appear as right-aligned bubbles. Assistant replies use semantic Markdown styled with shadcn Typeset, simple syntax-highlighted code containers, and Mermaid diagrams. Code and table toolbars are omitted. The small agent orb stays below the latest response and smoothly moves as its height changes. The large initial orb is removed after the first message.
+
+On send, a bottom spacer creates just enough scroll reach to align the new user message near the top, including when the transcript is shorter than the viewport. Remaining spacer is reused without accumulation. Reply growth and upward reader scroll consume it irreversibly; retry does not replenish it. Streaming never follows the response automatically. The reader can use the centered jump-to-latest control for an explicit smooth jump to the real content end. Scrollbars remain at the viewport edge, with content padding inside the transcript and a short fade above the composer.
+
+Incoming deltas are buffered for display with a seeded, non-cyclic rhythm. The visual clock keeps its phase across short gaps and adds brief, single-use pauses at prose boundaries; code does not receive prose pauses. Chunk sizes increase with backlog and content age. The presentation targets 200ms of lag, releases content aged 350ms at the next scheduled deadline, and drains the remaining queue within 250ms of transport completion while the scheduler is running. Text, Markdown whitespace, and Unicode graphemes are preserved. The turn remains active until displayed text drains, so completion feedback and future conversation context agree with the visible response. Canceling discards pending display work; retry starts a fresh attempt.
+
+UI SFX uses the Zen pack with a quiet master gain. Typing, sending, completion, retry, errors, sign-in, and call-ending feedback use short semantic cues; hover and scrolling stay silent. Agent typing selects sounds only on newly displayed content, with variable eligibility, occasional omissions, and small gain/rate changes. Recovery and final draining reduce its gain. Interface effects are suspended during voice calls and hidden-page updates. The accessible sound toggle persists its preference in localStorage; transcript and audio are not persisted. Existing mute preferences from the previous project name are preserved.
+
+Use `DOT_TEXT_PROVIDER=codex` (the development default) or `DOT_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. Voice always uses that key. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `DOT_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
 
 The Codex integration requires **Codex CLI 0.156.1**. This version is checked during initialization because environment isolation is verified against its protocol; other versions fail closed. Install that version through the official [Codex CLI instructions](https://learn.chatgpt.com/docs/cli). After upgrading the adapter, re-run the local CLI protocol test before changing the supported version.
 
-Friend starts one local `codex app-server` process on demand. It uses Codex-managed ChatGPT authentication and a separate `CODEX_HOME` at `~/.local/share/friend/codex`, so signing in to the desktop app or another CLI profile does not sign you in here. Codex stores its managed credentials there; do not commit or share that directory. To sign out, stop Vite and run `CODEX_HOME="$HOME/.local/share/friend/codex" codex logout`. The child inherits only `PATH` and this dedicated `CODEX_HOME`. Tokens and raw upstream errors never reach the browser.
+Dot starts one local `codex app-server` process on demand. It uses Codex-managed ChatGPT authentication and a separate `CODEX_HOME` at `~/.local/share/dot/codex`, so signing in to the desktop app or another CLI profile does not sign you in here. Codex stores its managed credentials there; do not commit or share that directory. To sign out, stop Vite and run `CODEX_HOME="$HOME/.local/share/dot/codex" codex logout`. Existing profiles from the previous project name are reused automatically; for those profiles, use their existing directory when running logout. The child inherits only `PATH` and this dedicated `CODEX_HOME`. Tokens and raw upstream errors never reach the browser.
 
-Every reply requests `gpt-6-luna` with reasoning `none`. Account authentication permits entering the text view; it does not prove access to the model. Only a completed inference proves model access for that request. Model or subscription limits appear as reply errors, without changing the model or provider. Live account access has not been verified by the automated tests.
+Every reply requests `gpt-6-luna` with reasoning `none`. Account authentication permits sending text messages; it does not prove access to the model. Only a completed inference proves model access for that request. Model or subscription limits appear as reply errors, without changing the model or provider. Live account access has not been verified by the automated tests.
 
 Each request starts an ephemeral Codex thread and passes the browser's accepted message history as a JSON conversation. Completed user/assistant pairs supply context; failed partial replies are excluded by the existing conversation store. No thread identifier or token is sent to the browser. The thread is unsubscribed after completion, failure, or cancellation. The app interrupts active turns when the browser leaves or cancels a reply. Conversation state remains in browser memory; the app does not create saved Codex chats.
 
-Codex is an agent protocol, so its tool contract differs from the API's `tools: []` / `tool_choice: none`. Friend supplies `environments: []`, empty dynamic tools and workspace roots, disables agents, apps, plugins, shell and other capabilities, and uses read-only access with approvals set to never. With the supported CLI, no shell, file editing, browser, MCP or subagent tool is exposed. Codex retains internal V8 orchestration (without filesystem/network access), clock/skill helpers and input requests. Friend rejects server-initiated requests and never asks the browser to approve or execute tools. The CLI test verifies the actual outbound tool catalog against a local mock endpoint; it performs no OpenAI inference or login.
+Codex is an agent protocol, so its tool contract differs from the API's `tools: []` / `tool_choice: none`. Dot supplies `environments: []`, empty dynamic tools and workspace roots, disables agents, apps, plugins, shell and other capabilities, and uses read-only access with approvals set to never. With the supported CLI, no shell, file editing, browser, MCP or subagent tool is exposed. Codex retains internal V8 orchestration (without filesystem/network access), clock/skill helpers and input requests. Dot rejects server-initiated requests and never asks the browser to approve or execute tools. The CLI test verifies the actual outbound tool catalog against a local mock endpoint; it performs no OpenAI inference or login.
 
 This is a localhost development integration using [Codex app-server authentication](https://learn.chatgpt.com/docs/app-server). Review the official [ChatGPT plan integration guidance](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server) before extending it to distribution or hosted use.
 
@@ -67,12 +77,12 @@ Microphone audio travels to OpenAI over the WebRTC media track. A local analyser
 
 The call becomes ready on `session.started`. Ending it silences both sides, sends `session.close`, and waits for `session.closed` before releasing the connection. A bounded timeout releases resources if finalization cannot be confirmed. Canceled startup, denied permissions, disconnects, unmounts, and page exit also release local resources. Leaving the page closes the transport immediately and cannot wait for final acknowledgment.
 
-Friend does not persist audio or transcripts and does not request OpenAI session storage. Audio is sent to OpenAI for the conversation and remains subject to the configured project's API data policy.
+Dot does not persist audio or transcripts and does not request OpenAI session storage. Audio is sent to OpenAI for the conversation and remains subject to the configured project's API data policy.
 
 ## Project structure
 
 - `src/App.tsx` composes the interface.
-- `src/components/friend-orb.tsx` visualizes model audio.
+- `src/components/dot-orb.tsx` visualizes model audio.
 - `src/components/call-button.tsx` presents call actions.
 - `src/components/microphone-waveform.tsx` presents the fixed microphone waveform.
 - `src/hooks/use-live-session.ts` connects React to the session lifecycle.
@@ -83,11 +93,29 @@ Friend does not persist audio or transcripts and does not request OpenAI session
 - `server/live-api.ts` validates local requests and calls the OpenAI SDK.
 - `server/codex-process.ts` manages the isolated Codex stdio process.
 - `server/codex-provider.ts` owns ChatGPT authentication and text streaming.
-- `src/lib/text-access.ts` gates text-mode entry on confirmed access.
+- `src/lib/text-access.ts` owns startup authentication and sign-in state.
+- `src/components/text-conversation-view.tsx` presents the unified transcript, composer, and call controls.
+- `src/components/compact-agent-orb.tsx` follows the height of the latest reply below its content.
+- `src/components/assistant-markdown.tsx` and `src/typeset.css` render semantic Markdown.
+- `src/components/markdown-code-block.tsx` provides the simple highlighted code surface.
+- `src/lib/text-conversation.ts` owns in-memory turns, accepted context, retry, and cancellation.
+- `src/lib/paced-text.ts` and `src/lib/stream-rhythm.ts` control incremental presentation.
+- `src/lib/conversation-spacer.ts` owns send alignment and irreversible spacer consumption.
+- `src/lib/conversation-scroll-motion.ts` animates only explicit send/jump commands.
+- `src/hooks/use-composer-shortcuts.ts` routes page-level text editing to the composer.
+- `src/lib/interface-sounds.ts` and `src/lib/agent-typing.ts` own sound preferences and event-bound typing selection.
 - `server/vite-plugin.ts` selects the local text provider and mounts the routes.
 - `src/components/ui/` contains the adapted source components.
 
 Keep session and audio resource management outside the UI components.
+
+## Interface style guide
+
+The interface uses shadcn/ui Radix Rhea, Inter, pointer cursors, and semantic neutral tokens in both system appearances. Icon controls share the `icon-lg` variant (36px); the waveform matches that height and the global spinner uses 16px. Messages and the composer share a 448px content measure, with safe-area padding inside the transcript rather than around its scrollbar.
+
+Application-specific geometry stays in the conversation components and CSS. Composer resizing and orb repositioning use the shared 160ms morph transition. Bubble, navigation-control, and interface entrances share a restrained spring; exits are shorter and quieter. Reduced motion removes spatial movement. The first-send transition retains the mounted scrollport while the initial orb recedes and the composer moves into its conversation position.
+
+Typography is defined by the owned shadcn Typeset stylesheet and the chat preset. Rich text keeps native heading, paragraph, list, quote, rule, and table semantics. Code blocks are selectable, keyboard-scrollable containers without file actions. Sound reinforces the existing visible states and can be muted independently of motion preferences.
 
 ## Checks
 
@@ -97,7 +125,7 @@ pnpm lint
 pnpm build
 ```
 
-Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, and OpenAI requests. They cover only the core session contract, separation of input/output audio, cancellation, cleanup, and necessary request/error handling. They make no live API calls.
+Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, and OpenAI requests. They cover voice resources, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls.
 
 Unit tests do not verify audible browser playback. A real voice conversation is a separate manual check with a configured OpenAI API key.
 
@@ -107,7 +135,7 @@ The test suite uses simulated authentication and inference. If Codex CLI 0.156.1
 
 ```sh
 pnpm build
-FRIEND_TEXT_PROVIDER=api pnpm preview
+DOT_TEXT_PROVIDER=api pnpm preview
 ```
 
 Preview serves the production frontend with the local voice and text API-key endpoints. The generated `dist/` directory alone cannot create voice sessions. This project currently supports local use: session creation accepts matching localhost origins. Hosting for other users requires a trusted backend with application authentication and request controls; this repository does not include a production deployment.

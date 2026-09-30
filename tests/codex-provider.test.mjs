@@ -80,11 +80,11 @@ test('signed-out and API-key accounts cannot infer; model substitution fails clo
 })
 
 test('failure, interruption, empty completion, rejected request and process crash never succeed', async () => {
-  for (const failure of ['failed', 'interrupted', 'empty', 'friend/process/error', 'friend/request/rejected']) {
+  for (const failure of ['failed', 'interrupted', 'empty', 'dot/process/error', 'dot/request/rejected']) {
     const { provider } = fixture({ 'turn/start': (_params, rpc) => {
       queueMicrotask(() => {
         if (failure !== 'empty') rpc.emit('item/agentMessage/delta', { threadId: 'thread-1', turnId: 'turn-1', delta: 'Partial' })
-        if (failure.startsWith('friend/')) rpc.emit(failure, { threadId: 'thread-1' })
+        if (failure.startsWith('dot/')) rpc.emit(failure, { threadId: 'thread-1' })
         else rpc.emit('turn/completed', { threadId: 'thread-1', turn: { id: 'turn-1', status: failure === 'empty' ? 'completed' : failure } })
       })
       return { turn: { id: 'turn-1' } }
@@ -128,7 +128,7 @@ test('login notifications, refusal, timeout, cancel and retry have terminal stat
   assert.equal((await f.provider.status()).login.state, 'failed')
   await f.provider.startLogin(); await new Promise((r) => setTimeout(r, 15))
   assert.equal((await f.provider.status()).login.state, 'failed')
-  await f.provider.startLogin(); f.rpc.emit('friend/process/error')
+  await f.provider.startLogin(); f.rpc.emit('dot/process/error')
   assert.equal((await f.provider.status()).login.state, 'failed')
   f.provider.close()
 })

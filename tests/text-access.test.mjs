@@ -35,7 +35,7 @@ test('signed-out click opens authentication, then enters text on confirmed succe
   assert.equal(f.popup.location.href, 'https://auth.openai.com/authorize')
   assert.equal(f.popup.opener, null)
   assert.equal(f.entries(), 1)
-  assert.deepEqual(f.gate.getSnapshot(), { pending: false, message: null })
+  assert.deepEqual(f.gate.getSnapshot(), { pending: false, message: null, checking: false, authenticated: true })
 })
 test('refusal stays on main screen with error and supports retry', async () => {
   const statuses = [signedOut, { ...pending, login: { id: 'one', state: 'failed', message: 'Sign-in declined. Try again.' } }]
@@ -75,5 +75,41 @@ test('second click and disposal cancel polling and ignore late authentication', 
   late.gate.cancel(null)
   resolveStatus(success); await run
   assert.equal(late.entries(), 0)
-  assert.deepEqual(late.gate.getSnapshot(), { pending: false, message: null })
+  assert.deepEqual(late.gate.getSnapshot(), { pending: false, message: null, checking: false, authenticated: null })
+})
+
+
+test('startup checks existing authentication without opening a popup or starting login', async () => {
+  for (const status of [signedOut, success, { provider: 'api', authenticated: true, login: null }]) {
+    let opened = false
+    const f = fixture([status], { openWindow: () => { opened = true; return null } })
+    const run = f.gate.check()
+    assert.equal(f.gate.getSnapshot().checking, true)
+    await run
+    assert.equal(opened, false)
+    assert.deepEqual(f.calls, ['status'])
+    assert.equal(f.gate.getSnapshot().authenticated, status.authenticated)
+    assert.equal(f.gate.getSnapshot().checking, false)
+  }
+})
+
+test('startup failure can retry, and disposed checks cannot authenticate late', async () => {
+  let reject = true
+  const f = fixture([], { request: async () => {
+    if (reject) throw new Error('Server offline')
+    return success
+  } })
+  await f.gate.check()
+  assert.equal(f.gate.getSnapshot().message, 'Server offline')
+  reject = false
+  await f.gate.check()
+  assert.equal(f.gate.getSnapshot().authenticated, true)
+  let resolve
+  const late = fixture([], { request: () => new Promise((done) => { resolve = done }) })
+  const run = late.gate.check()
+  late.gate.cancel(null)
+  resolve(success)
+  await run
+  assert.equal(late.gate.getSnapshot().authenticated, null)
+  assert.equal(late.gate.getSnapshot().checking, false)
 })

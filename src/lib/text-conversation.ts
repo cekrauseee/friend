@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { ChatMessage, TextChatTransport } from './text-chat-client.ts'
 import { sendTextChat, TextChatError } from './text-chat-client.ts'
+import { createPacedText, schedulePacing, type PacingScheduler } from './paced-text.ts'
 
 export type TextMode = 'voice' | 'text'
 export type TurnStatus = 'waiting' | 'streaming' | 'complete' | 'failed'
@@ -11,6 +12,7 @@ export interface ConversationTurn {
   assistantText: string
   status: TurnStatus
   error: string | null
+  presentationAccelerated?: boolean
 }
 
 export interface TextConversationStore {
@@ -30,9 +32,12 @@ const failedMessage = 'Could not complete the reply. Please try again.'
 export function createTextConversationStore(
   transport: TextChatTransport = sendTextChat,
   createId: () => string = () => crypto.randomUUID(),
+  schedule: PacingScheduler = schedulePacing,
+  now: () => number = () => performance.now(),
 ) {
   let generation = 0
   let controller: AbortController | null = null
+  let presentation: ReturnType<typeof createPacedText> | null = null
 
   return create<TextConversationStore>((set, get) => {
     const isCurrent = (attempt: number, id: string) =>
@@ -52,44 +57,48 @@ export function createTextConversationStore(
       const attempt = ++generation
       const abortController = new AbortController()
       controller = abortController
-      const onDelta = (text: string) => {
-        if (!text || !isCurrent(attempt, id)) return
+      let terminalError: string | null = null
+      const pacing = createPacedText((text, presentationAccelerated) => {
+        if (!isCurrent(attempt, id)) return
         set((state) => ({
           turns: state.turns.map((turn) => turn.id === id
-            ? { ...turn, assistantText: turn.assistantText + text, status: 'streaming' }
+            ? { ...turn, assistantText: turn.assistantText + text, status: 'streaming', presentationAccelerated }
             : turn),
         }))
+      }, () => {
+        if (!isCurrent(attempt, id)) return
+        generation++
+        controller = null
+        presentation = null
+        set((state) => ({
+          activeTurnId: null,
+          turns: state.turns.map((turn) => turn.id === id
+            ? { ...turn, status: terminalError ? 'failed' : 'complete', error: terminalError }
+            : turn),
+        }))
+      }, schedule, now)
+      presentation = pacing
+      const onDelta = (text: string) => {
+        if (isCurrent(attempt, id)) pacing.push(text)
       }
       const run = async () => {
         try {
           await transport(messages, abortController.signal, onDelta)
           if (!isCurrent(attempt, id)) return
-          generation++
           controller = null
-          set((state) => ({
-            activeTurnId: null,
-            turns: state.turns.map((turn) => turn.id === id
-              ? { ...turn, status: 'complete', error: null }
-              : turn),
-          }))
+          pacing.finish()
         } catch (error) {
           if (!isCurrent(attempt, id)) return
-          generation++
           controller = null
-          const message = error instanceof TextChatError ? error.message : failedMessage
-          set((state) => ({
-            activeTurnId: null,
-            turns: state.turns.map((turn) => turn.id === id
-              ? { ...turn, status: 'failed', error: message }
-              : turn),
-          }))
+          terminalError = error instanceof TextChatError ? error.message : failedMessage
+          pacing.finish()
         }
       }
       void run()
     }
 
     return {
-      mode: 'voice',
+      mode: 'text',
       turns: [],
       activeTurnId: null,
       sendText(text) {
@@ -132,6 +141,8 @@ export function createTextConversationStore(
         const id = get().activeTurnId
         if (!id) return
         generation++
+        presentation?.cancel()
+        presentation = null
         const activeController = controller
         controller = null
         set((state) => ({

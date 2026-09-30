@@ -5,6 +5,7 @@ import type { CallStatus } from '@/lib/live-session'
 
 interface CallButtonProps {
   ref?: Ref<HTMLButtonElement>
+  size?: 'icon' | 'icon-lg'
   status: CallStatus
   hasError: boolean
   onClick: () => void
@@ -18,15 +19,16 @@ const labels: Record<CallStatus, string> = {
   error: 'Try calling again',
 }
 
-export function CallButton({ ref, status, hasError, onClick }: CallButtonProps) {
+export function CallButton({ ref, size = 'icon-lg', status, hasError, onClick }: CallButtonProps) {
   const active = status === 'connecting' || status === 'connected' || status === 'closing'
 
   return (
     <Button
       type="button"
       ref={ref}
-      variant="call"
-      size="call"
+      variant="outline"
+      data-action="call"
+      size={size}
       aria-label={labels[status]}
       aria-busy={status === 'connecting' || status === 'closing'}
       aria-describedby={hasError ? 'call-error' : undefined}

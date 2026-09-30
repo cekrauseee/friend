@@ -1,6 +1,6 @@
 # Third-party notices
 
-The following source components are included in Friend. Their original licenses are reproduced below.
+The following source components are included in Dot. Their original licenses are reproduced below.
 
 ## Orbkit
 

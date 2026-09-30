@@ -1,9 +1,9 @@
 import { Shdr14 } from '@/components/ui/shdr-14'
 
-export function FriendOrb({ level }: { level: number }) {
+export function DotOrb({ level }: { level: number }) {
   return (
     <Shdr14
-      className="friend-orb"
+      className="dot-orb"
       style={{ width: '100%', height: '100%' }}
       colors={{ ink: '#181b20', paper: '#c2ccd8' }}
       volumes={{ input: 0, output: 0.3 + level * 0.65 }}

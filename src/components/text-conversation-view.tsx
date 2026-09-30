@@ -1,8 +1,23 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useCallback, useEffect, useRef, useState, type Ref } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { AssistantMarkdown } from '@/components/assistant-markdown'
 import { CompactAgentOrb } from '@/components/compact-agent-orb'
 import { ConversationComposer } from '@/components/conversation-composer'
+import { DotOrb } from '@/components/dot-orb'
+import type { CallStatus } from '@/lib/live-session'
+import { Bubble, BubbleContent } from '@/components/ui/bubble'
+import { Button } from '@/components/ui/button'
+import { composerMorph } from '@/lib/composer-size'
+import { conversationPresentation } from '@/lib/conversation-presentation'
+import { useConversationScene } from '@/hooks/use-conversation-scene'
+import { useTransientError } from '@/hooks/use-transient-error'
+import { MessageScroller, MessageScrollerProvider, MessageScrollerViewport, MessageScrollerContent, MessageScrollerItem, MessageScrollerButton } from '@/components/ui/message-scroller'
+import { Ellipsis } from 'lucide-react'
+import { interfaceSounds } from '@/lib/interface-sounds'
+import { useComposerShortcuts } from '@/hooks/use-composer-shortcuts'
+import { surfaceHidden, surfaceVisible, surfaceExit, surfaceSpring, surfaceFade } from '@/lib/surface-motion'
+
+const MotionMessageScroller = motion.create(MessageScroller)
 
 export type TurnStatus = 'waiting' | 'streaming' | 'complete' | 'failed'
 
@@ -12,25 +27,27 @@ export interface ConversationTurn {
   assistantText: string
   status: TurnStatus
   error: string | null
+  presentationAccelerated?: boolean
 }
 
 export interface ConversationViewportBridge {
   scrollRef?: Ref<HTMLDivElement>
-  contentRef?: Ref<HTMLDivElement>
-  turnRef?: (id: string, element: HTMLDivElement | null) => void
-  replyRef?: (id: string, element: HTMLDivElement | null) => void
-  composerRef?: Ref<HTMLDivElement>
-  tailRef?: Ref<HTMLDivElement>
-  spacerPx?: number
-  jumpControl?: ReactNode
+  onScrollIntent?: () => void
+  jumpToLatest?: () => void
 }
 
 export interface TextConversationViewProps {
+  revealed?: boolean
+  ready?: boolean
   turns: ConversationTurn[]
   activeTurnId: string | null
   onSend: (text: string) => string | null
   onRetry: (id: string) => boolean
-  onEnterVoice: () => void
+  onToggleCall: () => void
+  voiceStatus: CallStatus
+  voiceError: string | null
+  inputBands: number[]
+  outputLevel: number
   viewport?: ConversationViewportBridge
 }
 
@@ -40,61 +57,96 @@ interface TurnViewProps {
   active: boolean
   canRetry: boolean
   onRetry: (id: string) => boolean
-  turnRef?: ConversationViewportBridge['turnRef']
-  replyRef?: ConversationViewportBridge['replyRef']
 }
 
-function TurnView({ turn, latest, active, canRetry, onRetry, turnRef, replyRef }: TurnViewProps) {
-  const attachTurn = useCallback((element: HTMLDivElement | null) => {
-    turnRef?.(turn.id, element)
-  }, [turn.id, turnRef])
-  const attachReply = useCallback((element: HTMLDivElement | null) => {
-    replyRef?.(turn.id, element)
-  }, [turn.id, replyRef])
+function TurnView({ turn, latest, active, canRetry, onRetry }: TurnViewProps) {
+  const reducedMotion = useReducedMotion()
+  const previousText = useRef(active && turn.status === 'streaming' ? '' : turn.assistantText)
   const errorId = `turn-error-${turn.id}`
 
+  useEffect(() => {
+    if (active && turn.status === 'streaming' && turn.assistantText !== previousText.current) {
+      const delta = turn.assistantText.startsWith(previousText.current)
+        ? turn.assistantText.slice(previousText.current.length) : turn.assistantText
+      interfaceSounds.playAgentTyping(turn.id, delta, turn.presentationAccelerated)
+    }
+    if (!active || turn.status !== 'streaming') interfaceSounds.resetAgentTyping(turn.id)
+    previousText.current = turn.assistantText
+  }, [active, turn.status, turn.assistantText, turn.id, turn.presentationAccelerated])
+
   return (
-    <div ref={attachTurn} data-turn-id={turn.id} className="conversation-turn">
-      <div className="conversation-user-row">
-        <p className="conversation-user-bubble" dir="auto">{turn.userText}</p>
-      </div>
+    <MessageScrollerItem messageId={turn.id} scrollAnchor={false} data-turn-id={turn.id} className="conversation-turn">
+      <motion.div
+        className="conversation-user-row"
+        initial={active ? (reducedMotion ? { opacity: 0 } : surfaceHidden) : false}
+        animate={surfaceVisible}
+        transition={reducedMotion ? surfaceFade : surfaceSpring}
+        style={{ transformOrigin: 'right bottom' }}
+      >
+        <Bubble align="end" variant="secondary">
+          <BubbleContent asChild>
+            <p className="whitespace-pre-wrap [overflow-wrap:anywhere]" dir="auto">{turn.userText}</p>
+          </BubbleContent>
+        </Bubble>
+      </motion.div>
       <div className="conversation-assistant" aria-busy={active} aria-describedby={turn.status === 'failed' && turn.error ? errorId : undefined}>
-        <div ref={attachReply} data-assistant-reply={turn.id} className="conversation-reply">
+        <div data-assistant-reply={turn.id} className="conversation-reply" dir="auto">
           {turn.assistantText ? <AssistantMarkdown text={turn.assistantText} streaming={turn.status === 'streaming' && active} /> : null}
         </div>
-        {latest ? <CompactAgentOrb status={turn.status} /> : null}
+        <AnimatePresence initial={active}>
+          {latest ? <CompactAgentOrb key={turn.id} status={turn.status} /> : null}
+        </AnimatePresence>
         {turn.status === 'failed' ? (
           <div className="conversation-turn-error" id={errorId}>
             <p>{turn.error || 'The response stopped. Please try again.'}</p>
-            {canRetry ? <button type="button" onClick={() => onRetry(turn.id)}>Retry response</button> : null}
+            {canRetry ? <Button type="button" variant="secondary" onClick={() => onRetry(turn.id)}>Retry response</Button> : null}
           </div>
         ) : null}
       </div>
-    </div>
+    </MessageScrollerItem>
   )
 }
 
 export function TextConversationView({
+  revealed = true,
+  ready = true,
   turns,
   activeTurnId,
   onSend,
   onRetry,
-  onEnterVoice,
+  onToggleCall,
+  voiceStatus,
+  voiceError,
+  inputBands,
+  outputLevel,
   viewport,
 }: TextConversationViewProps) {
   const [draft, setDraft] = useState('')
+  const [requestedOpen, setRequestedOpen] = useState(false)
+  const displayedVoiceError = useTransientError(voiceError, voiceStatus)
+  const { showLargeOrb, composerOpen, calling } = conversationPresentation(turns.length, voiceStatus, requestedOpen, draft)
+  const sceneRef = useRef<HTMLElement>(null)
+  const footerRef = useRef<HTMLDivElement>(null)
+  const orbRef = useRef<HTMLDivElement>(null)
+  const scene = useConversationScene(showLargeOrb, sceneRef, footerRef, orbRef)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const openComposer = useCallback(() => setRequestedOpen(true), [])
+  useComposerShortcuts({ enabled: ready && !calling, open: composerOpen, inputRef, onOpen: openComposer, onDraftChange: setDraft })
   const reducedMotion = useReducedMotion()
   const latest = turns.at(-1)
+  const voiceAnnouncement = voiceStatus === 'connecting' ? 'Connecting call.'
+    : voiceStatus === 'connected' ? 'Call connected.'
+      : voiceStatus === 'closing' ? 'Ending call.' : 'Call ended.'
   const announcement = latest?.status === 'waiting' ? 'Message sent. Thinking.'
     : latest?.status === 'streaming' ? 'Answer started.'
       : latest?.status === 'complete' ? 'Answer complete.'
         : latest?.status === 'failed' ? 'Answer failed. Retry is available.' : ''
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => inputRef.current?.focus())
+    if (!ready || !composerOpen) return
+    const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
     return () => cancelAnimationFrame(frame)
-  }, [])
+  }, [ready, composerOpen])
 
   function sendDraft() {
     const acceptedId = onSend(draft)
@@ -102,53 +154,116 @@ export function TextConversationView({
   }
 
   return (
-    <motion.section
-      className="text-conversation"
-      data-empty={turns.length === 0}
-      aria-label="Text conversation"
-      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
-      transition={{ duration: reducedMotion ? 0.12 : 0.22, ease: 'easeOut' }}
-    >
-      <div ref={viewport?.scrollRef} className="conversation-scroll" data-conversation-scroll>
-        <div ref={viewport?.contentRef} className="conversation-content max-w-lg mx-auto" data-conversation-content>
-          {turns.map((turn) => (
-            <TurnView
-              key={turn.id}
-              turn={turn}
-              latest={turn.id === latest?.id}
-              active={turn.id === activeTurnId}
-              canRetry={turn.id === latest?.id && activeTurnId === null}
-              onRetry={onRetry}
-              turnRef={viewport?.turnRef}
-              replyRef={viewport?.replyRef}
-            />
-          ))}
-          <div ref={viewport?.tailRef} data-conversation-tail aria-hidden="true" />
-          <div data-conversation-spacer aria-hidden="true" style={{ blockSize: Math.max(0, viewport?.spacerPx ?? 0) }} />
-        </div>
-      </div>
-      <div className="conversation-footer">
-        {viewport?.jumpControl ? <div className="conversation-jump-slot">{viewport.jumpControl}</div> : null}
-        <motion.div
-          ref={viewport?.composerRef}
-          className="conversation-composer-wrap max-w-lg mx-auto"
-          data-conversation-composer
-          layout={reducedMotion ? false : 'position'}
-          transition={{ layout: { duration: 0.24, ease: 'easeOut' } }}
+    <MessageScrollerProvider autoScroll={false} defaultScrollPosition="start" scrollMargin={4} scrollPreviousItemPeek={0} scrollEdgeThreshold={80}>
+      <motion.section
+        ref={sceneRef}
+        className="text-conversation"
+        data-empty={turns.length === 0}
+        aria-label="Conversation"
+        initial={reducedMotion ? { opacity: 0 } : { ...surfaceHidden, scale: 0.985 }}
+        animate={reducedMotion ? { opacity: revealed ? 1 : 0 } : revealed ? surfaceVisible : { ...surfaceHidden, scale: 0.985 }}
+        exit={reducedMotion ? { opacity: 0 } : surfaceExit}
+        transition={{ ...(reducedMotion ? surfaceFade : surfaceSpring), delay: revealed ? 0.1 : 0 }}
+      >
+        <AnimatePresence>
+          {showLargeOrb ? (
+            <motion.div
+              key="initial-orb"
+              ref={orbRef}
+              className="unified-orb-stage"
+              initial={reducedMotion ? { opacity: 0 } : { ...surfaceHidden, filter: 'blur(4px)' }}
+              animate={{ ...(reducedMotion || revealed ? surfaceVisible : surfaceHidden), marginTop: scene.orbOffset, filter: revealed || reducedMotion ? 'blur(0px)' : 'blur(4px)' }}
+              exit={reducedMotion ? { opacity: 0 } : { ...surfaceExit, filter: 'blur(4px)' }}
+              transition={reducedMotion ? { ...surfaceFade, marginTop: { duration: 0 } } : { ...surfaceSpring, marginTop: composerMorph }}
+            >
+              <DotOrb level={outputLevel} />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+        <MotionMessageScroller
+          className="conversation-scroller"
+          inert={showLargeOrb}
+          aria-hidden={showLargeOrb}
+          style={{ bottom: scene.footerHeight + 8 }}
+          initial={false}
+          animate={{ opacity: showLargeOrb ? 0 : 1 }}
+          transition={reducedMotion ? { duration: 0.1 } : { ...composerMorph, delay: showLargeOrb ? 0 : 0.06 }}
         >
-          <ConversationComposer
-            draft={draft}
-            onDraftChange={setDraft}
-            onSubmit={sendDraft}
-            onEnterVoice={onEnterVoice}
-            busy={activeTurnId !== null}
-            inputRef={inputRef}
-          />
+          <MessageScrollerViewport
+            ref={viewport?.scrollRef}
+            preserveScrollOnPrepend={false}
+            className="conversation-scroll"
+            data-conversation-scroll
+            onWheel={viewport?.onScrollIntent}
+            onTouchMove={viewport?.onScrollIntent}
+            onPointerDown={viewport?.onScrollIntent}
+            onKeyDown={(event) => {
+              if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) viewport?.onScrollIntent?.()
+            }}
+          >
+            <MessageScrollerContent className="conversation-content mx-auto" data-conversation-content aria-busy={activeTurnId !== null}>
+              {turns.map((turn) => (
+                <TurnView
+                  key={turn.id}
+                  turn={turn}
+                  latest={turn.id === latest?.id}
+                  active={turn.id === activeTurnId}
+                  canRetry={turn.id === latest?.id && activeTurnId === null}
+                  onRetry={onRetry}
+                />
+              ))}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+        </MotionMessageScroller>
+        <motion.div
+          ref={footerRef}
+          className="conversation-footer"
+          data-idle={showLargeOrb}
+          initial={false}
+          animate={{ y: showLargeOrb ? scene.composerOffset : 0 }}
+          transition={reducedMotion ? { duration: 0 } : showLargeOrb ? composerMorph : { duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="conversation-jump-slot">
+          {!showLargeOrb ? <MessageScrollerButton variant="outline" size="icon-lg" className="conversation-jump"
+            onClick={(event) => {
+              if (viewport?.jumpToLatest) { event.preventDefault(); viewport.jumpToLatest() }
+            }}
+              aria-label="Jump to latest message" title="Jump to latest message">
+              {activeTurnId !== null ? <Ellipsis aria-hidden="true" /> : undefined}
+            </MessageScrollerButton> : null}
+          </div>
+          <motion.div
+            className="conversation-composer-wrap max-w-md mx-auto"
+            data-conversation-composer
+          >
+            <ConversationComposer
+              draft={draft}
+              onDraftChange={setDraft}
+              onSubmit={sendDraft}
+              onToggleCall={onToggleCall}
+              voiceStatus={voiceStatus}
+              inputBands={inputBands}
+              hasVoiceError={Boolean(displayedVoiceError)}
+              open={composerOpen}
+              onOpen={() => { setRequestedOpen(true); interfaceSounds.play('openComposer', true) }}
+              onClose={() => { if (!turns.length) setRequestedOpen(false) }}
+              busy={!ready || activeTurnId !== null}
+              inputRef={inputRef}
+            />
+          </motion.div>
+          <motion.div
+            className="unified-call-error"
+            aria-hidden={!displayedVoiceError}
+            initial={false}
+            animate={{ height: displayedVoiceError ? 'auto' : 0, marginTop: displayedVoiceError ? 16 : 0, opacity: displayedVoiceError ? 1 : 0 }}
+            transition={reducedMotion ? { duration: 0 } : composerMorph}
+          >
+            <p id="call-error" className="call-error" role="status">{voiceError}</p>
+          </motion.div>
         </motion.div>
-      </div>
-      <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
-    </motion.section>
+        <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
+        <span className="sr-only" role="status" aria-live="polite">{voiceAnnouncement}</span>
+      </motion.section>
+    </MessageScrollerProvider>
   )
 }

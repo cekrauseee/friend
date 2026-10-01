@@ -7,6 +7,7 @@ import { useTextConversation } from '@/lib/text-conversation'
 import { createTextAccess } from '@/lib/text-access'
 import { GlobalLoading } from '@/components/global-loading'
 import { AuthenticationDialog } from '@/components/authentication-dialog'
+import { AccentPicker } from '@/components/accent-picker'
 import { SoundToggle } from '@/components/sound-toggle'
 import { interfaceSounds } from '@/lib/interface-sounds'
 import { conversationOutcomeSound } from '@/lib/conversation-sound'
@@ -76,7 +77,10 @@ function App() {
     <main className="dot dot-text-mode" aria-label="Dot" aria-busy={starting}
       onPointerDownCapture={() => { void interfaceSounds.unlock() }}
       onKeyDownCapture={() => { void interfaceSounds.unlock() }}>
-      <SoundToggle />
+      <div className="appearance-controls" data-appearance-control>
+        <AccentPicker />
+        <SoundToggle />
+      </div>
       <div className="contents" inert={access.authenticated !== true}>
         <TextConversationView
           revealed={!starting}

@@ -37,6 +37,12 @@
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
+  --user-bubble: var(--secondary);
+  --user-bubble-foreground: oklch(0 0 0);
+  --selection: var(--primary);
+  --selection-foreground: oklch(1 0 0);
+  --user-bubble-selection: var(--selection);
+  --user-bubble-selection-foreground: oklch(1 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -81,6 +87,9 @@
     --primary-foreground: oklch(0.205 0 0);
     --secondary: oklch(0.269 0 0);
     --secondary-foreground: oklch(0.985 0 0);
+    --user-bubble-foreground: oklch(1 0 0);
+    --selection-foreground: oklch(0 0 0);
+    --user-bubble-selection-foreground: oklch(0 0 0);
     --muted: oklch(0.269 0 0);
     --muted-foreground: oklch(0.708 0 0);
     --accent: oklch(0.269 0 0);
@@ -116,6 +125,8 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-user-bubble: var(--user-bubble);
+  --color-user-bubble-foreground: var(--user-bubble-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-muted: var(--muted);
@@ -180,4 +191,31 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+
+/* Selectable reading content and native editing remain distinct from UI chrome. */
+#root,
+[data-slot="popover-content"],
+[data-slot="alert-dialog-content"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-selectable-message],
+input,
+textarea,
+[contenteditable]:not([contenteditable="false"]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+::selection {
+  background-color: var(--selection);
+  color: var(--selection-foreground);
+}
+
+[data-slot="bubble"][data-variant="user"] ::selection {
+  background-color: var(--user-bubble-selection);
+  color: var(--user-bubble-selection-foreground);
 }

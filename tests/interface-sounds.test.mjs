@@ -182,3 +182,35 @@ test('Zen cues have bounded peaks at the configured gains and typing stays softe
   assert.ok(peaks.composerTyping < peaks.send)
   assert.ok(peaks.composerTyping < peaks.receive)
 })
+
+
+test('accent opening/selection/shade/reset use the existing mute and call gates', async () => {
+  const actions = ['accentOpen', 'accentSelect', 'accentShade', 'accentReset', 'accentHover']
+  for (const gate of ['mute', 'voice', 'hidden']) {
+    const f = fixture({ visible: gate !== 'hidden' })
+    if (gate === 'mute') f.sounds.setEnabled(false)
+    if (gate === 'voice') f.sounds.setVoiceActive(true)
+    for (const action of actions) f.sounds.play(action, action !== 'accentHover')
+    assert.equal(f.played.length, 0)
+  }
+  const f = fixture()
+  await f.sounds.unlock()
+  for (const action of actions) f.sounds.play(action, action !== 'accentHover')
+  assert.equal(f.played.length, 5)
+  assert.equal(f.played[2].options.cooldownMs, 60)
+})
+
+
+test('color hover reuses quiet typing with a cooldown and cannot unlock audio', async () => {
+  const f = fixture()
+  f.sounds.play('accentHover')
+  assert.equal(f.played.length, 0)
+  assert.equal(f.unlocks, 0)
+  await f.sounds.unlock()
+  f.sounds.play('accentHover')
+  assert.equal(f.played[0].cue, 'typing')
+  assert.equal(f.played[0].options.cooldownMs, 90)
+  assert.equal(f.played[0].options.retrigger, 'restart')
+  assert.ok(f.played[0].options.volume < interfaceSoundCues.agentTyping.volume)
+  assert.ok(f.played[0].options.volume < interfaceSoundCues.composerTyping.volume)
+})

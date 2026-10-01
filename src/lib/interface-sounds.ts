@@ -11,6 +11,11 @@ export const interfaceSoundCues = {
   retry: { cue: 'retry', volume: 0.15 },
   error: { cue: 'error', volume: 0.22 },
   authenticated: { cue: 'success', volume: 0.16 },
+  accentOpen: { cue: 'open', volume: 0.10 },
+  accentSelect: { cue: 'select', volume: 0.12 },
+  accentHover: { cue: 'typing', volume: 0.07, cooldownMs: 90, retrigger: 'restart' },
+  accentShade: { cue: 'select', volume: 0.06, cooldownMs: 60 },
+  accentReset: { cue: 'cancel', volume: 0.12 },
   callEnded: { cue: 'disconnect', volume: 0.15 },
 } satisfies Record<string, { cue: CueName } & PlayOptions>
 

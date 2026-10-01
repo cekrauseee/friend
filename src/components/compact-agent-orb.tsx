@@ -3,6 +3,7 @@ import type { TurnStatus } from '@/components/text-conversation-view'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion } from 'motion/react'
 import { composerMorph } from '@/lib/composer-size'
+import { useAccentPreference } from '@/hooks/use-accent-preference'
 
 const stateColors = {
   thinking: { ink: '#18103b', paper: '#b6aaff' },
@@ -21,6 +22,7 @@ interface CompactAgentOrbProps {
 }
 
 export function CompactAgentOrb({ status }: CompactAgentOrbProps) {
+  const { palette } = useAccentPreference()
   const state = status === 'waiting' ? 'thinking' : status === 'streaming' ? 'speaking' : 'idle'
   const reducedMotion = useReducedMotion()
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -76,7 +78,7 @@ export function CompactAgentOrb({ status }: CompactAgentOrbProps) {
         animate={entrance}
         transition={composerMorph}
       >
-        <Shdr14 size={32} state={state} stateColors={stateColors} stateVolumes={stateVolumes} maxDpr={2} />
+        <Shdr14 size={32} state={state} stateColors={palette?.orbStates ?? stateColors} stateVolumes={stateVolumes} maxDpr={2} />
       </motion.span>
     </motion.div>
     </>

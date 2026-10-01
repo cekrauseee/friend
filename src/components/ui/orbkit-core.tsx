@@ -817,6 +817,8 @@ export function ShaderOrb({
   const stateVolumesRef = useRef(stateVolumes);
   const volumesRef = useRef(volumes);
   const pausedRef = useRef(paused);
+  // Reduced motion has no animation loop; repaint changed targets in place.
+  const redrawRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     stateRef.current = state;
@@ -827,6 +829,7 @@ export function ShaderOrb({
     stateVolumesRef.current = stateVolumes;
     volumesRef.current = volumes;
     pausedRef.current = paused;
+    redrawRef.current?.();
   }, [state, params, colors, statePresets, stateColors, stateVolumes, volumes, paused]);
 
   useEffect(() => {
@@ -998,8 +1001,8 @@ export function ShaderOrb({
         const targetIn = liveVolumes?.input ?? stateVolume?.input ?? tin;
         const targetOut = liveVolumes?.output ?? stateVolume?.output ?? tout;
         const kVol = 1 - Math.exp(-dt * 12);
-        cur.in += (targetIn - cur.in) * kVol;
-        cur.out += (targetOut - cur.out) * kVol;
+        cur.in = snap ? targetIn : cur.in + (targetIn - cur.in) * kVol;
+        cur.out = snap ? targetOut : cur.out + (targetOut - cur.out) * kVol;
 
         /*
           Flow speed follows the output volume. It multiplies every integrated
@@ -1119,6 +1122,7 @@ export function ShaderOrb({
       };
 
       const releaseGL = () => {
+        redrawRef.current = null;
         resizeObserver?.disconnect();
         intersectionObserver?.disconnect();
         gl.deleteProgram(prog);
@@ -1131,6 +1135,7 @@ export function ShaderOrb({
         // One representative frame, then stop — snapped straight onto the
         // state's targets, since a spring would only be part-way there.
         tSec = 1;
+        redrawRef.current = () => uploadAndDraw(0, true);
         uploadAndDraw(1, true);
         return releaseGL;
       }

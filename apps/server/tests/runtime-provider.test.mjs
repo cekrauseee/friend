@@ -5,36 +5,13 @@ import { Readable } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { liveApiPlugin } from '../src/vite-plugin.ts'
+import { loadServerConfig } from '../src/config.ts'
+import { createRuntime } from '../src/runtime.ts'
 
-test('Codex is development-only; explicit Codex selection never falls back to API in preview', async () => {
-  const envDir = await mkdtemp(join(tmpdir(), 'dot-vite-test-'))
-  const saved = process.env.DOT_TEXT_PROVIDER
-  try {
-    process.env.DOT_TEXT_PROVIDER = 'codex'
-    const preview = liveApiPlugin()
-    preview.config({}, { command: 'serve', mode: 'production', isPreview: true })
-    assert.throws(() => preview.configResolved({ mode: 'production', command: 'serve', envDir }), /requires pnpm dev/)
-    process.env.DOT_TEXT_PROVIDER = 'api'
-    const api = liveApiPlugin()
-    api.config({}, { command: 'serve', mode: 'production', isPreview: true })
-    api.configResolved({ mode: 'production', command: 'serve', envDir })
-    const routes = []
-    api.configurePreviewServer({ middlewares: { use: (path) => routes.push(path) } })
-    assert.deepEqual(routes, ['/api/text-access', '/api/voice-provider', '/api/elevenlabs-session', '/api/session', '/api/chat', '/api/transcription'])
-    process.env.DOT_TEXT_PROVIDER = 'codex'
-    const dev = liveApiPlugin()
-    dev.config({}, { command: 'serve', mode: 'development', isPreview: false })
-    dev.configResolved({ mode: 'development', command: 'serve', envDir })
-    const developmentRoutes = []
-    dev.configureServer({ middlewares: { use: (path) => developmentRoutes.push(path) } })
-    assert.deepEqual(developmentRoutes, routes)
-    dev.closeBundle()
-  } finally {
-    if (saved === undefined) delete process.env.DOT_TEXT_PROVIDER
-    else process.env.DOT_TEXT_PROVIDER = saved
-    await rm(envDir, { recursive: true, force: true })
-  }
+test('Codex is development-only and explicit production selection fails closed', async () => {
+  assert.equal(loadServerConfig({ mode: 'development', env: {}, root: '/nonexistent' }).textProvider, 'codex')
+  assert.equal(loadServerConfig({ mode: 'production', env: {}, root: '/nonexistent' }).textProvider, 'api')
+  assert.throws(() => loadServerConfig({ mode: 'production', env: { DOT_TEXT_PROVIDER: 'codex' }, root: '/nonexistent' }), /requires development mode/)
 })
 
 async function transcriptionEnvironment(values, run, file = '') {
@@ -47,7 +24,7 @@ async function transcriptionEnvironment(values, run, file = '') {
     for (const key of keys) delete process.env[key]
     process.env.DOT_TEXT_PROVIDER = 'api'
     Object.assign(process.env, values)
-    await writeFile(join(envDir, '.env'), file)
+    await writeFile(join(envDir, '.env.local'), file)
     await run(envDir)
   } finally {
     globalThis.fetch = originalFetch
@@ -60,17 +37,10 @@ async function transcriptionEnvironment(values, run, file = '') {
 }
 
 function mountedTranscription(envDir, preview) {
-  const plugin = liveApiPlugin()
-  const mode = preview ? 'production' : 'development'
-  plugin.config({}, { command: 'serve', mode, isPreview: preview })
-  plugin.configResolved({ mode, command: 'serve', envDir })
-  const routes = new Map()
-  const server = { middlewares: { use: (path, handler) => routes.set(path, handler) } }
-  if (preview) plugin.configurePreviewServer(server)
-  else plugin.configureServer(server)
-  assert.deepEqual([...routes.keys()], ['/api/text-access', '/api/voice-provider', '/api/elevenlabs-session', '/api/session', '/api/chat', '/api/transcription'])
-  plugin.closeBundle()
-  return routes.get('/api/transcription')
+  const runtime = createRuntime(loadServerConfig({ mode: preview ? 'production' : 'development', root: envDir }))
+  const handler = runtime.handlers.transcription
+  void runtime.close()
+  return handler
 }
 
 async function transcribe(handler) {
@@ -86,7 +56,7 @@ async function transcribe(handler) {
   return res
 }
 
-test('development and preview independently select default OpenAI, explicit OpenAI and ElevenLabs', async () => {
+test('development and production independently select default OpenAI, explicit OpenAI and ElevenLabs', async () => {
   for (const preview of [false, true]) {
     for (const provider of [undefined, 'openai', 'elevenlabs']) {
       const elevenlabs = provider === 'elevenlabs'
@@ -144,7 +114,7 @@ test('ElevenLabs dictation also works alongside Codex text selection without an 
   })
 })
 
-test('unknown and blank transcription selections fail at startup in development and preview', async () => {
+test('unknown and blank transcription selections fail at startup in development and production', async () => {
   for (const provider of ['other', '', ' ', 'OpenAI']) {
     await transcriptionEnvironment({ DOT_TRANSCRIPTION_PROVIDER: provider }, async (envDir) => {
       for (const preview of [false, true]) {
@@ -179,36 +149,15 @@ test('transcription selection loads local environment files and process values t
   }, file)
 })
 
-test('Vite independently selects voice and rejects invalid voice configuration in dev and preview', async () => {
-  const envDir = await mkdtemp(join(tmpdir(), 'dot-voice-config-'))
-  await writeFile(join(envDir, '.env'), 'ELEVENLABS_API_KEY=test-only\nELEVENLABS_SPEECH_ENGINE_ID=seng_test\n')
-  const savedVoice = process.env.DOT_VOICE_PROVIDER
-  const savedText = process.env.DOT_TEXT_PROVIDER
-  try {
-    process.env.DOT_TEXT_PROVIDER = 'api'
-    for (const isPreview of [false, true]) {
-      const config = { mode: isPreview ? 'production' : 'development', command: 'serve', envDir }
-      process.env.DOT_VOICE_PROVIDER = 'invalid'
-      const invalid = liveApiPlugin()
-      invalid.config({}, { ...config, isPreview })
-      assert.throws(() => invalid.configResolved(config), /DOT_VOICE_PROVIDER must be openai or elevenlabs/)
-      process.env.DOT_VOICE_PROVIDER = 'elevenlabs'
-      const plugin = liveApiPlugin()
-      plugin.config({}, { ...config, isPreview })
-      plugin.configResolved(config)
-      const routes = new Map()
-      plugin[isPreview ? 'configurePreviewServer' : 'configureServer']({ middlewares: { use: (path, handler) => routes.set(path, handler) } })
-      let body
-      await routes.get('/api/voice-provider')({ method: 'GET', headers: { host: 'localhost:5173', origin: 'http://localhost:5173' } }, {
-        writeHead() {}, end(value) { body = JSON.parse(value) },
-      })
-      assert.deepEqual(body, { provider: 'elevenlabs' })
-    }
-  } finally {
-    if (savedVoice === undefined) delete process.env.DOT_VOICE_PROVIDER
-    else process.env.DOT_VOICE_PROVIDER = savedVoice
-    if (savedText === undefined) delete process.env.DOT_TEXT_PROVIDER
-    else process.env.DOT_TEXT_PROVIDER = savedText
-    await rm(envDir, { recursive: true, force: true })
+test('runtime independently selects voice and rejects invalid voice configuration', async () => {
+  for (const mode of ['development', 'production']) {
+    assert.throws(() => loadServerConfig({ mode, env: { DOT_VOICE_PROVIDER: 'invalid' }, root: '/nonexistent' }), /DOT_VOICE_PROVIDER/)
+    const runtime = createRuntime(loadServerConfig({ mode, env: { DOT_TEXT_PROVIDER: 'api', DOT_VOICE_PROVIDER: 'elevenlabs', ELEVENLABS_API_KEY: 'test-only', ELEVENLABS_SPEECH_ENGINE_ID: 'seng_test' }, root: '/nonexistent' }))
+    let body
+    await runtime.handlers.voiceProvider({ method: 'GET', headers: { host: 'localhost:5173', origin: 'http://localhost:5173' } }, {
+      writeHead() {}, end(value) { body = JSON.parse(value) },
+    })
+    assert.deepEqual(body, { provider: 'elevenlabs' })
+    await runtime.close()
   }
 })

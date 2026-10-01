@@ -7,7 +7,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { WebSocket } from 'ws'
-import { liveApiPlugin } from '../src/vite-plugin.ts'
+import { loadServerConfig } from '../src/config.ts'
+import { createRuntime } from '../src/runtime.ts'
 import { conversationConfig } from '../src/conversation-config.ts'
 import { createSpeechEngineServer, speechEngineAddress } from '../src/speech-engine-server.ts'
 import { createSpeechEngineAdmission } from '../src/speech-engine-admission.ts'
@@ -48,24 +49,11 @@ test('listener config is explicit and OpenAI does not depend on Speech Engine bi
   assert.deepEqual(speechEngineAddress(), { host: '127.0.0.1', port: 3001 })
   for (const port of ['', '0', '65536', '3.5', '3001x']) assert.throws(() => speechEngineAddress(undefined, port), /PORT/)
   assert.throws(() => speechEngineAddress(''), /HOST/)
-  const saved = process.env.DOT_VOICE_PROVIDER
-  const savedPort = process.env.DOT_SPEECH_ENGINE_PORT
-  const savedText = process.env.DOT_TEXT_PROVIDER
-  const envDir = await mkdtemp(join(tmpdir(), 'dot-openai-runtime-'))
-  try {
-    process.env.DOT_VOICE_PROVIDER = 'openai'
-    process.env.DOT_TEXT_PROVIDER = 'api'
-    process.env.DOT_SPEECH_ENGINE_PORT = 'invalid'
-    const plugin = liveApiPlugin()
-    plugin.config({}, { command: 'serve', mode: 'production', isPreview: true })
-    plugin.configResolved({ command: 'serve', mode: 'production', envDir })
-    await plugin.closeBundle()
-  } finally {
-    for (const [name, value] of [['DOT_VOICE_PROVIDER', saved], ['DOT_SPEECH_ENGINE_PORT', savedPort], ['DOT_TEXT_PROVIDER', savedText]]) {
-      if (value === undefined) delete process.env[name]; else process.env[name] = value
-    }
-    await rm(envDir, { recursive: true, force: true })
-  }
+  const runtime = createRuntime(loadServerConfig({ mode: 'production', root: '/nonexistent', env: {
+    DOT_VOICE_PROVIDER: 'openai', DOT_TEXT_PROVIDER: 'api', DOT_SPEECH_ENGINE_PORT: 'invalid',
+  } }))
+  assert.equal(runtime.speech, undefined)
+  await runtime.close()
 })
 
 test('binding failure is actionable, closes the bridge and permits idempotent cleanup', async t => {
@@ -79,7 +67,7 @@ test('binding failure is actionable, closes the bridge and permits idempotent cl
   await runtime.close()
 })
 
-for (const preview of [false, true]) test(`${preview ? 'preview' : 'development'} wiring shares API cognition across text and successive admitted speech turns`, async t => {
+for (const preview of [false, true]) test(`${preview ? 'production' : 'development'} wiring shares API cognition across text and successive admitted speech turns`, async t => {
   const names = ['DOT_VOICE_PROVIDER', 'DOT_TEXT_PROVIDER', 'DOT_TRANSCRIPTION_PROVIDER', 'DOT_SPEECH_ENGINE_HOST',
     'DOT_SPEECH_ENGINE_PORT', 'ELEVENLABS_API_KEY', 'ELEVENLABS_SPEECH_ENGINE_ID', 'OPENAI_API_KEY']
   const saved = Object.fromEntries(names.map(name => [name, process.env[name]]))
@@ -92,11 +80,11 @@ for (const preview of [false, true]) test(`${preview ? 'preview' : 'development'
     if (handler) void handler(req, res)
     else { res.writeHead(404); res.end() }
   })
-  const plugin = liveApiPlugin()
+  let runtime
   let socket
   t.after(async () => {
     socket?.terminate()
-    await plugin.closeBundle()
+    await runtime?.close()
     if (app.listening) await new Promise(resolve => app.close(resolve))
     globalThis.fetch = nativeFetch
     for (const name of names) {
@@ -131,10 +119,10 @@ for (const preview of [false, true]) test(`${preview ? 'preview' : 'development'
     return nativeFetch(url, init)
   }
   const mode = preview ? 'production' : 'development'
-  plugin.config({}, { command: 'serve', mode, isPreview: preview })
-  plugin.configResolved({ command: 'serve', mode, envDir })
-  await plugin[preview ? 'configurePreviewServer' : 'configureServer']({ httpServer: app,
-    middlewares: { use: (path, handler) => routes.set(path, handler) } })
+  runtime = createRuntime(loadServerConfig({ mode, root: envDir }))
+  const handlers = runtime.handlers
+  for (const [path, handler] of Object.entries({ '/api/chat': handlers.chat, '/api/elevenlabs-session': handlers.elevenlabsSession })) routes.set(path, handler)
+  await runtime.speech?.listen()
   const appPort = await listen(app)
   const appUrl = `http://127.0.0.1:${appPort}`
   const headers = { origin: appUrl, 'content-type': 'application/json' }
@@ -169,9 +157,9 @@ for (const preview of [false, true]) test(`${preview ? 'preview' : 'development'
     assert.equal(store, false)
   }
   const closed = once(socket, 'close')
-  app.emit('close')
+  await runtime.close()
   await closed
-  await plugin.closeBundle()
+  await runtime?.close()
   const replacement = createServer()
   await listen(replacement, port)
   await new Promise(resolve => replacement.close(resolve))

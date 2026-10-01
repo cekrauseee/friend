@@ -15,7 +15,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-For voice calls, set `OPENAI_API_KEY` in `.env.local` to an existing OpenAI project key with GPT-Live access. Text chat in development uses your ChatGPT account through Codex CLI 0.156.1 on `PATH`; it does not need an API key. Then run:
+For voice calls and dictation, set `OPENAI_API_KEY` in `.env.local` to an existing OpenAI project key with access to the required voice and transcription models. Text chat in development uses your ChatGPT account through Codex CLI 0.156.1 on `PATH`; it does not need an API key. Then run:
 
 ```sh
 pnpm dev
@@ -41,7 +41,7 @@ Incoming deltas are buffered for display with a seeded, non-cyclic rhythm. The v
 
 UI SFX uses the Zen pack with a quiet master gain. Typing, sending, completion, retry, errors, sign-in, and call-ending feedback use short semantic cues; hover and scrolling stay silent. Agent typing selects sounds only on newly displayed content, with variable eligibility, occasional omissions, and small gain/rate changes. Recovery and final draining reduce its gain. Interface effects are suspended during voice calls and hidden-page updates. The accessible sound toggle persists its preference in localStorage; transcript and audio are not persisted. Existing mute preferences from the previous project name are preserved.
 
-Use `DOT_TEXT_PROVIDER=codex` (the development default) or `DOT_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. Voice always uses that key. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `DOT_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
+Use `DOT_TEXT_PROVIDER=codex` (the development default) or `DOT_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. Voice and dictation always use that key; dictation does not use Codex or ChatGPT authentication. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `DOT_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
 
 The Codex integration requires **Codex CLI 0.156.1**. This version is checked during initialization because environment isolation is verified against its protocol; other versions fail closed. Install that version through the official [Codex CLI instructions](https://learn.chatgpt.com/docs/cli). After upgrading the adapter, re-run the local CLI protocol test before changing the supported version.
 
@@ -55,14 +55,29 @@ Codex is an agent protocol, so its tool contract differs from the API's `tools: 
 
 This is a localhost development integration using [Codex app-server authentication](https://learn.chatgpt.com/docs/app-server). Review the official [ChatGPT plan integration guidance](https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server) before extending it to distribution or hosted use.
 
+## Dictation
+
+Select the microphone beside the chat control or composer to dictate a text message. Allow microphone access; the composer keeps its existing draft while a fixed waveform shows local microphone activity. Calls and dictation cannot run together. The phone control disappears once the text conversation contains messages.
+
+- **Stop** transcribes the recording, appends the trimmed transcript to the existing draft, and returns focus to editing without sending. A space separates the draft and transcript unless the draft already ends in whitespace.
+- **Check** transcribes and submits that same merged draft through the existing text conversation. The draft clears only when the conversation accepts the send; a rejected send leaves the merged text available to edit. An accepted turn that later fails uses the existing retry behavior.
+- **Cancel** discards the recording or aborts transcription and preserves the original draft. Cancellation, page exit, authentication changes and stale results cannot insert or send text.
+
+Recording stays in browser memory until Stop or Check. The completed WebM or MP4 recording is sent once to `POST /api/transcription`, which uses `gpt-transcribe` with the server's `OPENAI_API_KEY`, independently of `DOT_TEXT_PROVIDER`. The server accepts raw audio bytes from matching localhost origins, validates the container, and returns trimmed nonempty text. It holds audio only in bounded memory, sends no-store responses, and does not save recordings or transcripts. Uploaded audio remains subject to the configured OpenAI project's API data policy and billing.
+
+Each recording is limited to five minutes and 25,000,000 bytes. Exceeding either bound discards it locally without uploading. Microphone startup times out after 30 seconds; the server allows two minutes for collection and transcription, while the browser stops waiting after 130 seconds. Permission, unsupported format, empty recording/transcript, configuration, access, rate-limit and network failures leave the draft intact. Recording errors remain beside the composer until dismissed or retried. Cancel stays available during startup and processing; duplicate finishing actions are ignored.
+
+Stopping capture releases microphone tracks and its audio meter before upload. Cancellation, failures, unmount and page exit also clear timers, recorded chunks and audio resources, and abort pending requests.
+
 ## OpenAI configuration
 
-The server configures the session in [`server/session-config.ts`](server/session-config.ts):
+The server configures voice sessions in [`server/session-config.ts`](server/session-config.ts) and dictation in [`server/transcription-api.ts`](server/transcription-api.ts):
 
 | Setting | Value |
 | --- | --- |
 | Voice model | `gpt-live-1` |
 | Responses backend | `gpt-6-luna` |
+| Dictation model | `gpt-transcribe` |
 | Backend reasoning effort | `none` |
 | Tools | None |
 | Tool choice | `none` |
@@ -91,6 +106,11 @@ Dot does not persist audio or transcripts and does not request OpenAI session st
 - `src/lib/webrtc.ts` waits for ICE gathering.
 - `server/session-config.ts` holds the model configuration.
 - `server/live-api.ts` validates local requests and calls the OpenAI SDK.
+- `server/transcription-api.ts` validates bounded recordings and requests transcription.
+- `src/lib/audio-capture.ts` owns local recording, frequency bands, cancellation, and cleanup.
+- `src/lib/transcription-client.ts` uploads completed recordings and handles safe transcription errors.
+- `src/hooks/use-audio-capture.ts` connects React to the capture lifecycle.
+- `src/hooks/use-composer-dictation.ts` applies transcripts to drafts and accepted text sends.
 - `server/codex-process.ts` manages the isolated Codex stdio process.
 - `server/codex-provider.ts` owns ChatGPT authentication and text streaming.
 - `src/lib/text-access.ts` owns startup authentication and sign-in state.
@@ -125,9 +145,9 @@ pnpm lint
 pnpm build
 ```
 
-Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, and OpenAI requests. They cover voice resources, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls.
+Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, and OpenAI requests. They cover voice resources, deferred dictation uploads, recording bounds and cleanup, transcript draft/send behavior, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls.
 
-Unit tests do not verify audible browser playback. A real voice conversation is a separate manual check with a configured OpenAI API key.
+Unit tests do not verify audible browser playback, real microphone recording or live transcription. A real voice conversation and dictation request are separate manual checks with a configured OpenAI API key.
 
 The test suite uses simulated authentication and inference. If Codex CLI 0.156.1 is installed, it also runs a local HTTP protocol test; otherwise that test is skipped. No test requires a ChatGPT account or an API key. Live login, real model entitlement, popup behavior and visual QA require a separate manual check.
 
@@ -138,7 +158,7 @@ pnpm build
 DOT_TEXT_PROVIDER=api pnpm preview
 ```
 
-Preview serves the production frontend with the local voice and text API-key endpoints. The generated `dist/` directory alone cannot create voice sessions. This project currently supports local use: session creation accepts matching localhost origins. Hosting for other users requires a trusted backend with application authentication and request controls; this repository does not include a production deployment.
+Preview serves the production frontend with the local voice, text and transcription API-key endpoints. The generated `dist/` directory alone cannot create voice sessions. This project currently supports local use: session creation accepts matching localhost origins. Hosting for other users requires a trusted backend with application authentication and request controls; this repository does not include a production deployment.
 
 ## Source components
 
@@ -166,6 +186,8 @@ Original source licenses are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_N
 
 ## API references
 
+- [Speech-to-text transcription](https://developers.openai.com/api/docs/guides/speech-to-text)
+- [GPT Transcribe model](https://developers.openai.com/api/docs/models/gpt-transcribe)
 - [GPT-Live WebRTC connection](https://developers.openai.com/api/docs/guides/voice-webrtc?api=live)
 - [Responses delegation and supported configuration](https://developers.openai.com/api/docs/guides/live-delegation)
 - [GPT-6 Luna reasoning settings](https://developers.openai.com/api/docs/models/gpt-6-luna)

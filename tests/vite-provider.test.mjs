@@ -19,11 +19,14 @@ test('Codex is development-only; explicit Codex selection never falls back to AP
     api.configResolved({ mode: 'production', command: 'serve', envDir })
     const routes = []
     api.configurePreviewServer({ middlewares: { use: (path) => routes.push(path) } })
-    assert.deepEqual(routes, ['/api/text-access', '/api/session', '/api/chat'])
+    assert.deepEqual(routes, ['/api/text-access', '/api/session', '/api/chat', '/api/transcription'])
     process.env.DOT_TEXT_PROVIDER = 'codex'
     const dev = liveApiPlugin()
     dev.config({}, { command: 'serve', mode: 'development', isPreview: false })
     dev.configResolved({ mode: 'development', command: 'serve', envDir })
+    const developmentRoutes = []
+    dev.configureServer({ middlewares: { use: (path) => developmentRoutes.push(path) } })
+    assert.deepEqual(developmentRoutes, routes)
     dev.closeBundle()
   } finally {
     if (saved === undefined) delete process.env.DOT_TEXT_PROVIDER

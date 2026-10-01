@@ -1,7 +1,8 @@
 import { loadEnv, type Plugin } from 'vite'
 import { createLiveApi } from './live-api.ts'
 import { createChatApi } from './chat-api.ts'
-import { createTranscriptionApi } from './transcription-api.ts'
+import { createProviderTranscriptionApi, createTranscriptionApi } from './transcription-api.ts'
+import { createElevenLabsTranscriptionProvider } from './transcription-provider.ts'
 import { createCodexProvider, createTextAccessApi } from './codex-provider.ts'
 
 /** Local backend, shared by the development server and production preview. */
@@ -20,8 +21,16 @@ export function liveApiPlugin(): Plugin {
     configResolved(config) {
       const env = loadEnv(config.mode, config.envDir, '')
       const apiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY
+      const transcriptionProvider = process.env.DOT_TRANSCRIPTION_PROVIDER ?? env.DOT_TRANSCRIPTION_PROVIDER ?? 'openai'
+      if (transcriptionProvider !== 'openai' && transcriptionProvider !== 'elevenlabs') {
+        throw new Error('DOT_TRANSCRIPTION_PROVIDER must be openai or elevenlabs.')
+      }
+      const elevenLabsKey = process.env.ELEVENLABS_API_KEY ?? env.ELEVENLABS_API_KEY
       handler = createLiveApi(apiKey)
-      transcriptionHandler = createTranscriptionApi(apiKey)
+      transcriptionHandler = transcriptionProvider === 'elevenlabs'
+        ? createProviderTranscriptionApi(createElevenLabsTranscriptionProvider(elevenLabsKey),
+          'Dictation requires an ElevenLabs API key on the local server.')
+        : createTranscriptionApi(apiKey)
       const provider = process.env.DOT_TEXT_PROVIDER || env.DOT_TEXT_PROVIDER || (development ? 'codex' : 'api')
       if (!['codex', 'api'].includes(provider)) throw new Error('DOT_TEXT_PROVIDER must be codex or api.')
       if (!development && config.command === 'serve' && provider === 'codex') {

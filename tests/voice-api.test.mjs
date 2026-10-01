@@ -19,14 +19,16 @@ async function run(handler, options) {
   await handler(req, res)
   return res
 }
-function agent() {
-  return { agent_id: 'agent_test', version_id: 'version_test', conversation_config: {
-    tts: { model_id: 'eleven_v4_turbo' }, agent: { prompt: { llm: 'gemini-3.8-flash' } },
-    conversation: { client_events: ['user_transcript', 'agent_response', 'agent_response_correction', 'interruption'] },
-  } }
+function engine() {
+  return { speech_engine_id: 'seng_test',
+    speech_engine: { ws_url: 'wss://public.example/speech-engine/upstream', request_headers: { secret: 'private_header' } },
+    tts: { model_id: 'eleven_v4_turbo', voice_id: 'voice_test' },
+    conversation: { client_events: ['audio', 'user_transcript', 'agent_response'] },
+  }
 }
 function api(fetcher, overrides = {}) {
-  return createVoiceApis({ provider: 'elevenlabs', elevenlabsApiKey: 'server_secret', elevenlabsAgentId: 'agent_test', fetch: fetcher, ...overrides })
+  return createVoiceApis({ provider: 'elevenlabs', elevenlabsApiKey: 'server_secret',
+    elevenlabsSpeechEngineId: 'seng_test', registerConversation: () => true, fetch: fetcher, ...overrides })
 }
 
 test('voice selection defaults to OpenAI and rejects unknown providers without fallback', () => {
@@ -52,9 +54,9 @@ test('preflight rejects missing or blank selected credentials before any upstrea
   const fetcher = async () => { calls++; throw new Error('Unexpected upstream call') }
   for (const options of [
     { provider: 'openai' }, { provider: 'openai', openaiApiKey: '  ' },
-    { provider: 'elevenlabs', elevenlabsAgentId: 'agent_test' },
+    { provider: 'elevenlabs', elevenlabsSpeechEngineId: 'seng_test' },
     { provider: 'elevenlabs', elevenlabsApiKey: 'test-only' },
-    { provider: 'elevenlabs', elevenlabsApiKey: '  ', elevenlabsAgentId: 'agent_test' },
+    { provider: 'elevenlabs', elevenlabsApiKey: '  ', elevenlabsSpeechEngineId: 'seng_test' },
   ]) {
     const res = await run(createVoiceApis({ ...options, fetch: fetcher }).provider, { method: 'GET' })
     assert.equal(res.status, 503)
@@ -66,44 +68,47 @@ test('preflight rejects missing or blank selected credentials before any upstrea
   assert.equal(calls, 0)
 })
 
-test('private token pins the validated v4 Turbo version and exposes only the bootstrap fields', async () => {
+test('private token uses the validated Speech Engine and registers its conversation before exposing bootstrap fields', async () => {
   const calls = []
+  const admissions = []
   const voice = api(async (url, init) => {
     calls.push({ url, init })
-    return Response.json(calls.length === 1 ? agent() : { token: 'conversation_token', conversation_id: 'private_id', private: 'upstream_details' })
-  })
+    return Response.json(calls.length === 1 ? engine() : { token: 'conversation_token', conversation_id: 'private_id', private: 'upstream_details' })
+  }, { registerConversation: id => { admissions.push(id); return true } })
   const res = await run(voice.elevenlabsSession)
   assert.equal(res.status, 201)
   assert.deepEqual(res.body, { provider: 'elevenlabs', model: 'eleven_v4_turbo', conversationToken: 'conversation_token' })
   assert.equal(res.headers['Cache-Control'], 'no-store')
-  assert.equal(calls[0].url.pathname, '/v1/convai/agents/agent_test')
+  assert.equal(calls[0].url.pathname, '/v1/speech-engine/seng_test')
   assert.equal(calls[1].url.pathname, '/v1/convai/conversation/token')
-  assert.equal(calls[1].url.searchParams.get('version_id'), 'version_test')
-  assert.equal(calls[1].url.searchParams.get('agent_id'), 'agent_test')
+  assert.equal(calls[1].url.searchParams.has('version_id'), false)
+  assert.deepEqual(admissions, ['private_id'])
+  assert.equal(calls[1].url.searchParams.get('agent_id'), 'seng_test')
   assert.equal(calls[1].init.headers['xi-api-key'], 'server_secret')
   assert.equal(calls[1].init.redirect, 'error')
   assert.ok(!JSON.stringify(res.body).includes('server_secret'))
 })
 
-test('wrong engine, custom LLM, missing version, disabled interruptions and alternate workflow are configuration errors before token', async () => {
+test('wrong engine, model, missing voice or upstream and disabled audio fail before token issuance', async () => {
   const mutations = [
-    value => { value.conversation_config.tts.model_id = 'eleven_v3_conversational' },
-    value => { value.conversation_config.tts.supported_voices = [{ model_family: 'flash' }] },
-    value => { value.conversation_config.agent.prompt.llm = 'custom-llm' },
-    value => { value.conversation_config.agent.prompt.custom_llm = { url: 'https://private.example' } },
-    value => { delete value.version_id },
-    value => { value.conversation_config.agent.disable_first_message_interruptions = true },
-    value => { value.conversation_config.conversation.client_events = ['audio'] },
-    value => { value.conversation_config.conversation.text_only = true },
-    value => { value.workflow = { nodes: { transfer: {} } } },
-    value => { value.conversation_config.language_presets = { fr: { overrides: { tts: { model_id: 'eleven_flash_v2' } } } } },
+    value => { value.speech_engine_id = 'seng_other' },
+    value => { value.tts.model_id = 'eleven_flash_v2' },
+    value => { value.tts.supported_voices = [{ model_family: 'flash' }] },
+    value => { delete value.tts.voice_id },
+    value => { value.tts.voice_id = '  ' },
+    value => { delete value.speech_engine },
+    value => { value.speech_engine.ws_url = 'https://public.example' },
+    value => { value.speech_engine.ws_url = 'wss://user:secret@public.example/ws' },
+    value => { value.conversation.client_events = ['audio'] },
+    value => { value.conversation.text_only = true },
   ]
   for (const mutate of mutations) {
     let calls = 0
-    const value = agent(); mutate(value)
+    const value = engine(); mutate(value)
     const result = await run(api(async () => { calls++; return Response.json(value) }).elevenlabsSession)
     assert.equal(result.status, 503)
     assert.equal(calls, 1)
+    assert.ok(!JSON.stringify(result.body).includes('private_header'))
   }
 })
 
@@ -114,7 +119,7 @@ test('missing config, disabled provider, bad method and origin never request a t
   assert.equal((await run(voice.elevenlabsSession, { method: 'GET' })).status, 405)
   assert.equal((await run(voice.elevenlabsSession, { origin: 'https://evil.example' })).status, 403)
   assert.equal((await run(api(undefined, { elevenlabsApiKey: undefined }).elevenlabsSession)).status, 503)
-  assert.equal((await run(api(undefined, { elevenlabsAgentId: undefined }).elevenlabsSession)).status, 503)
+  assert.equal((await run(api(undefined, { elevenlabsSpeechEngineId: undefined }).elevenlabsSession)).status, 503)
   assert.equal((await run(api(undefined, { provider: 'openai' }).elevenlabsSession)).status, 409)
   assert.equal(calls, 0)
 })
@@ -129,7 +134,7 @@ test('upstream auth/quota/model errors are safe and bounded responses are enforc
     assert.equal((await run(api(async () => invalid).elevenlabsSession)).status, 502)
   }
   let calls = 0
-  const res = await run(api(async () => Response.json(++calls === 1 ? agent() : { token: '' })).elevenlabsSession)
+  const res = await run(api(async () => Response.json(++calls === 1 ? engine() : { token: '' })).elevenlabsSession)
   assert.equal(res.status, 502)
 })
 
@@ -159,14 +164,54 @@ test('timeout aborts upstream and returns a recoverable error', async () => {
 })
 
 
-test('ordinary multilingual presets preserve the validated engine and native LLM', async () => {
-  const value = agent()
-  value.conversation_config.language_presets = {
-    fr: { overrides: { agent: { language: 'fr', first_message: 'Bonjour' } } },
-    es: { overrides: { tts: { model_id: 'eleven_v4_turbo' }, agent: { prompt: { llm: 'gpt-6-luna' } } } },
-  }
+test('Speech Engine needs no hosted agent LLM, workflow, version or interruption configuration', async () => {
   let calls = 0
-  const result = await run(api(async () => Response.json(++calls === 1 ? value : { token: 'token' })).elevenlabsSession)
+  const result = await run(api(async () => Response.json(++calls === 1 ? engine()
+    : { token: 'token', conversation_id: 'conv_test' })).elevenlabsSession)
   assert.equal(result.status, 201)
   assert.equal(calls, 2)
+})
+
+test('missing admission and hosted agent IDs fail closed before upstream calls', async () => {
+  let calls = 0
+  for (const options of [{ registerConversation: undefined }, { elevenlabsSpeechEngineId: 'agent_test' }]) {
+    const voice = api(async () => { calls++; throw new Error('Unexpected') }, options)
+    assert.equal((await run(voice.provider, { method: 'GET' })).status, 503)
+    assert.equal((await run(voice.elevenlabsSession)).status, 503)
+  }
+  assert.equal(calls, 0)
+})
+
+test('invalid token or conversation IDs never register and admission rejection never exposes token', async () => {
+  for (const result of [{ token: '' }, { token: 'token' }, { token: 'token', conversation_id: '' },
+    { token: 'token', conversation_id: 'invalid\nID' }, { token: 'token', conversation_id: 'x'.repeat(257) },
+    { token: 'x'.repeat(32769), conversation_id: 'conv_test' }]) {
+    let calls = 0
+    let registered = false
+    const res = await run(api(async () => Response.json(++calls === 1 ? engine() : result),
+      { registerConversation: () => { registered = true; return true } }).elevenlabsSession)
+    assert.equal(res.status, 502)
+    assert.equal(registered, false)
+  }
+  for (const registerConversation of [() => false, () => { throw new Error('private_secret') }]) {
+    let calls = 0
+    const res = await run(api(async () => Response.json(++calls === 1 ? engine()
+      : { token: 'private_token', conversation_id: 'conv_test' }), { registerConversation }).elevenlabsSession)
+    assert.ok([502, 503].includes(res.status))
+    assert.ok(!JSON.stringify(res.body).includes('private_'))
+  }
+})
+
+test('a disconnected token fetch cannot register or expose a late conversation', async () => {
+  const { req, res } = exchange()
+  let calls = 0
+  let registered = false
+  const voice = api(async () => {
+    if (++calls === 1) return Response.json(engine())
+    res.emit('close')
+    return Response.json({ token: 'token', conversation_id: 'conv_late' })
+  }, { registerConversation: () => { registered = true; return true } })
+  await voice.elevenlabsSession(req, res)
+  assert.equal(registered, false)
+  assert.equal(res.body, undefined)
 })

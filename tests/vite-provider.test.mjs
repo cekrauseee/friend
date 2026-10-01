@@ -181,7 +181,7 @@ test('transcription selection loads local environment files and process values t
 
 test('Vite independently selects voice and rejects invalid voice configuration in dev and preview', async () => {
   const envDir = await mkdtemp(join(tmpdir(), 'dot-voice-config-'))
-  await writeFile(join(envDir, '.env'), 'ELEVENLABS_API_KEY=test-only\nELEVENLABS_AGENT_ID=agent_test\n')
+  await writeFile(join(envDir, '.env'), 'ELEVENLABS_API_KEY=test-only\nELEVENLABS_SPEECH_ENGINE_ID=seng_test\n')
   const savedVoice = process.env.DOT_VOICE_PROVIDER
   const savedText = process.env.DOT_TEXT_PROVIDER
   try {

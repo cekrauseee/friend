@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import { createCodexProvider, createTextAccessApi, validAuthUrl } from '../server/codex-provider.ts'
 import { createChatApi } from '../server/chat-api.ts'
+import { conversationConfig, conversationInstructions } from '../server/conversation-config.ts'
 
 const tick = () => new Promise((resolve) => setImmediate(resolve))
 const messages = [{ role: 'user', content: 'Hi' }]
@@ -54,6 +55,9 @@ test('fixed Codex settings, isolated thread, accepted history and ordered stream
   const { provider, calls } = fixture()
   assert.deepEqual(await collect(provider), [{ type: 'delta', text: 'Hello' }, { type: 'done' }])
   const thread = calls.find((c) => c.method === 'thread/start').params
+  assert.ok(thread.baseInstructions.startsWith(`${conversationInstructions}\n\n`))
+  assert.ok(thread.baseInstructions.includes('JSON conversation'))
+  assert.equal(thread.config.model_reasoning_effort, conversationConfig.reasoning.effort)
   assert.equal(thread.model, 'gpt-6-luna'); assert.equal(thread.ephemeral, true)
   assert.equal(thread.allowProviderModelFallback, false)
   assert.equal(thread.approvalPolicy, 'never'); assert.equal(thread.sandbox, 'read-only')

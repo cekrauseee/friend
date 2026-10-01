@@ -52,50 +52,29 @@ function hasAlternateVoice(tts: ObjectValue) {
   })
 }
 
-/** Validate the existing immutable version; never change the hosted agent. */
-function agentVersion(value: unknown, agentId: string): string {
-  const agent = object(value)
-  const config = object(agent.conversation_config)
-  const prompt = object(object(config.agent).prompt)
-  if (agent.agent_id !== agentId || object(config.tts).model_id !== ELEVENLABS_VOICE_MODEL
-    || hasAlternateVoice(object(config.tts))) {
-    throw new VoiceError(503, 'Configure the ElevenLabs agent with Eleven v4 Turbo (eleven_v4_turbo).')
+/** Validate the Speech Engine's audio policy without exposing upstream settings. */
+function validateSpeechEngine(value: unknown, engineId: string) {
+  const engine = object(value)
+  const tts = object(engine.tts)
+  if (engine.speech_engine_id !== engineId || tts.model_id !== ELEVENLABS_VOICE_MODEL
+    || hasAlternateVoice(tts)) {
+    throw new VoiceError(503, 'Configure the ElevenLabs Speech Engine with Eleven v4 Turbo (eleven_v4_turbo).')
   }
-  if (typeof prompt.llm !== 'string' || !prompt.llm || prompt.llm === 'custom-llm' || prompt.custom_llm) {
-    throw new VoiceError(503, 'Configure the ElevenLabs agent with a native LLM served through ElevenLabs.')
+  if (typeof tts.voice_id !== 'string' || !tts.voice_id.trim()) {
+    throw new VoiceError(503, 'Configure a voice on the ElevenLabs Speech Engine.')
   }
-  const events = object(config.conversation).client_events
-  if (object(config.conversation).text_only === true
-    || object(config.agent).disable_first_message_interruptions === true
-    || !Array.isArray(events)
-    || !['user_transcript', 'agent_response', 'agent_response_correction', 'interruption'].every(event => events.includes(event))) {
-    throw new VoiceError(503, 'Enable audio, interruptions, and transcript events on the ElevenLabs agent.')
+  let upstream: URL
+  try { upstream = new URL(String(object(engine.speech_engine).ws_url ?? '')) }
+  catch { throw new VoiceError(503, 'Configure a secure upstream WebSocket URL on the ElevenLabs Speech Engine.') }
+  if (upstream.protocol !== 'wss:' || upstream.username || upstream.password) {
+    throw new VoiceError(503, 'Configure a secure upstream WebSocket URL on the ElevenLabs Speech Engine.')
   }
-  // A workflow can transfer to an unvalidated agent or override its speech engine.
-  if (Object.keys(object(object(agent.workflow).nodes)).length) {
-    throw new VoiceError(503, 'Use an ElevenLabs agent without workflows for this voice connection.')
+  const conversation = object(engine.conversation)
+  const events = conversation.client_events
+  if (conversation.text_only === true || !Array.isArray(events)
+    || !['audio', 'user_transcript', 'agent_response'].every(event => events.includes(event))) {
+    throw new VoiceError(503, 'Enable audio and transcript events on the ElevenLabs Speech Engine.')
   }
-  for (const preset of Object.values(object(config.language_presets))) {
-    const overrides = object(object(preset).overrides)
-    const tts = object(overrides.tts)
-    const presetAgent = object(overrides.agent)
-    const presetPrompt = object(presetAgent.prompt)
-    const conversation = object(overrides.conversation)
-    if ((tts.model_id != null && tts.model_id !== ELEVENLABS_VOICE_MODEL)
-      || hasAlternateVoice(tts)
-      || presetPrompt.llm === 'custom-llm' || presetPrompt.custom_llm
-      || presetAgent.disable_first_message_interruptions === true
-      || conversation.text_only === true
-      || (conversation.client_events != null && (!Array.isArray(conversation.client_events)
-        || !['user_transcript', 'agent_response', 'agent_response_correction', 'interruption']
-          .every(event => (conversation.client_events as unknown[]).includes(event))))) {
-      throw new VoiceError(503, 'Keep Eleven v4 Turbo, a native LLM, audio and required events in ElevenLabs language presets.')
-    }
-  }
-  if (typeof agent.version_id !== 'string' || !agent.version_id || agent.version_id.length > 256) {
-    throw new VoiceError(503, 'Publish a version of the ElevenLabs agent before starting a call.')
-  }
-  return agent.version_id
 }
 
 async function upstreamJson(fetcher: typeof fetch, url: URL, key: string, signal: AbortSignal) {
@@ -104,7 +83,7 @@ async function upstreamJson(fetcher: typeof fetch, url: URL, key: string, signal
     await response.body?.cancel()
     if (response.status === 429) throw new VoiceError(429, 'ElevenLabs is busy or your API limit was reached. Try again shortly.')
     if ([401, 403].includes(response.status)) throw new VoiceError(503, 'ElevenLabs access is not configured correctly.')
-    if ([400, 404, 422].includes(response.status)) throw new VoiceError(503, 'The ElevenLabs agent or voice model is unavailable. Check the agent configuration.')
+    if ([400, 404, 422].includes(response.status)) throw new VoiceError(503, 'The ElevenLabs Speech Engine or voice model is unavailable. Check the engine configuration.')
     throw new VoiceError(502, 'Could not start the ElevenLabs call. Please try again.')
   }
   const reader = response.body?.getReader()
@@ -130,15 +109,25 @@ export function createVoiceApis(options: {
   provider: VoiceProvider
   openaiApiKey?: string
   elevenlabsApiKey?: string
-  elevenlabsAgentId?: string
+  elevenlabsSpeechEngineId?: string
+  /** Admit the server-issued ID before its token becomes available to the browser. */
+  registerConversation?: (conversationId: string) => boolean
   fetch?: typeof fetch
   timeoutMs?: number
 }) {
   const openai = createLiveApi(options.provider === 'openai' ? options.openaiApiKey : undefined)
-  const configurationError = () => options.provider === 'openai'
-    ? options.openaiApiKey?.trim() ? null : 'OpenAI voice requires OPENAI_API_KEY on the server.'
-    : options.elevenlabsApiKey?.trim() && options.elevenlabsAgentId?.trim()
-      ? null : 'ElevenLabs voice requires ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the server.'
+  const configurationError = () => {
+    if (options.provider === 'openai') {
+      return options.openaiApiKey?.trim() ? null : 'OpenAI voice requires OPENAI_API_KEY on the server.'
+    }
+    if (!options.elevenlabsApiKey?.trim() || !options.elevenlabsSpeechEngineId?.trim()) {
+      return 'ElevenLabs voice requires ELEVENLABS_API_KEY and ELEVENLABS_SPEECH_ENGINE_ID on the server.'
+    }
+    if (!/^seng_[A-Za-z0-9_-]{1,250}$/.test(options.elevenlabsSpeechEngineId)) {
+      return 'ELEVENLABS_SPEECH_ENGINE_ID must identify a Speech Engine (seng_).'
+    }
+    return options.registerConversation ? null : 'The ElevenLabs Speech Engine connection is not configured on the server.'
+  }
   return {
     provider(request: IncomingMessage, response: ServerResponse) {
       if (!allowed(request, response, 'GET')) return
@@ -155,12 +144,13 @@ export function createVoiceApis(options: {
         reply(response, 409, { error: 'ElevenLabs voice is disabled. Restart the call using the selected voice provider.' })
         return
       }
-      const key = options.elevenlabsApiKey
-      const agentId = options.elevenlabsAgentId
-      if (!key?.trim() || !agentId?.trim()) {
-        reply(response, 503, { error: 'ElevenLabs voice requires ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the server.' })
+      const error = configurationError()
+      if (error) {
+        reply(response, 503, { error })
         return
       }
+      const key = options.elevenlabsApiKey!
+      const engineId = options.elevenlabsSpeechEngineId!
       const controller = new AbortController()
       let disconnected = false
       const onClose = () => { if (!response.writableEnded) { disconnected = true; controller.abort() } }
@@ -168,15 +158,21 @@ export function createVoiceApis(options: {
       const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000)
       try {
         const fetcher = options.fetch ?? fetch
-        const agentUrl = new URL(`https://api.elevenlabs.io/v1/convai/agents/${encodeURIComponent(agentId)}`)
-        const version = agentVersion(await upstreamJson(fetcher, agentUrl, key, controller.signal), agentId)
+        const engineUrl = new URL(`https://api.elevenlabs.io/v1/speech-engine/${encodeURIComponent(engineId)}`)
+        validateSpeechEngine(await upstreamJson(fetcher, engineUrl, key, controller.signal), engineId)
         if (controller.signal.aborted) throw new Error('Aborted')
         const tokenUrl = new URL('https://api.elevenlabs.io/v1/convai/conversation/token')
-        tokenUrl.searchParams.set('agent_id', agentId)
-        tokenUrl.searchParams.set('version_id', version)
+        tokenUrl.searchParams.set('agent_id', engineId)
         const result = object(await upstreamJson(fetcher, tokenUrl, key, controller.signal))
-        if (typeof result.token !== 'string' || !result.token || result.token.length > 32 * 1024) throw new Error('Invalid token')
-        if (!controller.signal.aborted) reply(response, 201, {
+        if (typeof result.token !== 'string' || !result.token.trim() || result.token.length > 32 * 1024
+          || typeof result.conversation_id !== 'string' || !/^[A-Za-z0-9_-]{1,256}$/.test(result.conversation_id)) {
+          throw new Error('Invalid conversation token')
+        }
+        if (controller.signal.aborted) throw new Error('Aborted')
+        if (options.registerConversation!(result.conversation_id) !== true) {
+          throw new VoiceError(503, 'Could not prepare the Speech Engine connection. Please try again shortly.')
+        }
+        reply(response, 201, {
           provider: 'elevenlabs', model: ELEVENLABS_VOICE_MODEL, conversationToken: result.token,
         })
       } catch (error) {

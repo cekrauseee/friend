@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createLiveApi } from './live-api.ts'
+import { isAllowedOrigin } from './origin-policy.ts'
 
 import type { VoiceProvider, VoiceProviderResponse, ElevenLabsSessionResponse, ServiceFailure } from '@dot/contracts'
 export type { VoiceProvider } from '@dot/contracts'
@@ -24,14 +25,7 @@ function allowed(request: IncomingMessage, response: ServerResponse, method: str
     reply(response, 405, { error: `This endpoint accepts ${method} requests.` })
     return false
   }
-  try {
-    // Same-origin GET fetches omit Origin; browser Fetch Metadata supplies the boundary.
-    if (method === 'GET' && !request.headers.origin && request.headers['sec-fetch-site'] === 'same-origin'
-      && ['localhost', '127.0.0.1', '[::1]'].includes(new URL(`http://${request.headers.host}`).hostname)) return true
-    const origin = new URL(request.headers.origin ?? '')
-    if (['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
-      && ['http:', 'https:'].includes(origin.protocol) && origin.host === request.headers.host) return true
-  } catch { /* Missing and invalid origins are rejected. */ }
+  if (isAllowedOrigin(request)) return true
   reply(response, 403, { error: 'Calls must be started from this local app.' })
   return false
 }

@@ -8,16 +8,8 @@ const MAX_CONTENT_BYTES = 32 * 1024
 export { ChatError, type ChatMessage, type ChatEvent, type ChatProvider } from './conversation-provider.ts'
 import { ChatError, conversationErrors as errors, createApiChatProvider, upstreamError, type ChatMessage, type ChatEvent, type ChatProvider } from './conversation-provider.ts'
 
-export function isLocalOrigin(request: IncomingMessage) {
-  try {
-    const origin = new URL(request.headers.origin ?? '')
-    return ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
-      && ['http:', 'https:'].includes(origin.protocol)
-      && origin.host === request.headers.host
-  } catch {
-    return false
-  }
-}
+import { isAllowedOrigin } from './origin-policy.ts'
+export { isAllowedOrigin as isLocalOrigin } from './origin-policy.ts'
 
 export function replyError(response: ServerResponse, error: ChatError) {
   if (response.destroyed || response.writableEnded) return
@@ -99,7 +91,7 @@ export function createChatApi(apiKey: string | undefined, client?: OpenAI, provi
 
   return async (request: IncomingMessage, response: ServerResponse) => {
     if (request.method !== 'POST') return replyError(response, errors.method())
-    if (!isLocalOrigin(request)) return replyError(response, errors.origin())
+    if (!isAllowedOrigin(request)) return replyError(response, errors.origin())
     if (!apiKey && !client && !provider) return replyError(response, errors.key())
 
     const controller = new AbortController()

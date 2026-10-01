@@ -22,16 +22,7 @@ function reply(response: ServerResponse, status: number, body: unknown) {
   response.end(JSON.stringify(body))
 }
 
-function isLocalOrigin(request: IncomingMessage) {
-  try {
-    const origin = new URL(request.headers.origin ?? '')
-    return ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
-      && ['http:', 'https:'].includes(origin.protocol)
-      && origin.host === request.headers.host
-  } catch {
-    return false
-  }
-}
+import { isAllowedOrigin } from './origin-policy.ts'
 
 async function readOffer(request: IncomingMessage): Promise<string> {
   if (!request.headers['content-type']?.startsWith('application/json')) {
@@ -70,7 +61,7 @@ export function createLiveApi(apiKey: string | undefined, client?: OpenAI) {
       reply(response, 405, { error: 'This endpoint accepts POST requests.' })
       return
     }
-    if (!isLocalOrigin(request)) {
+    if (!isAllowedOrigin(request)) {
       reply(response, 403, { error: 'Calls must be started from this local app.' })
       return
     }

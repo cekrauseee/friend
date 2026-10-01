@@ -37,7 +37,7 @@ export function loadServerConfig(options: { mode?: string; env?: NodeJS.ProcessE
   for (const origin of frontendOrigins) {
     try {
       const url = new URL(origin)
-      if (!['http:', 'https:'].includes(url.protocol) || url.origin !== origin) throw new Error()
+      if (origin.includes('*') || !['http:', 'https:'].includes(url.protocol) || url.origin !== origin) throw new Error()
     } catch { throw new Error('DOT_FRONTEND_ORIGINS must contain comma-separated HTTP(S) origins without paths, credentials or wildcards.') }
   }
   return {

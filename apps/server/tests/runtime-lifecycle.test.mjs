@@ -42,6 +42,13 @@ test('invalid runtime options fail safely and origin defaults are exact local or
   assert.deepEqual(config({}).frontendOrigins, ['http://localhost:5173', 'http://127.0.0.1:5173'])
 })
 
+test('configured frontend origins reject wildcard hostnames before runtime startup', () => {
+  for (const origin of ['http://*.example', 'https://*.example', 'https://app*.example', 'http://localhost:5173,https://*.example']) {
+    assert.throws(() => config({ DOT_FRONTEND_ORIGINS: origin }), /DOT_FRONTEND_ORIGINS.*without paths, credentials or wildcards/)
+  }
+  assert.deepEqual(config({ DOT_FRONTEND_ORIGINS: 'https://app.example' }).frontendOrigins, ['https://app.example'])
+})
+
 test('selected cognition is constructed once, shared with speech, and shutdown aborts active turns', async () => {
   let count = 0
   let speechProvider

@@ -1,6 +1,7 @@
 import { loadEnv, type Plugin } from 'vite'
 import { createLiveApi } from './live-api.ts'
 import { createChatApi } from './chat-api.ts'
+import { createTranscriptionApi } from './transcription-api.ts'
 import { createCodexProvider, createTextAccessApi } from './codex-provider.ts'
 
 /** Local backend, shared by the development server and production preview. */
@@ -10,6 +11,7 @@ export function liveApiPlugin(): Plugin {
   let codex: ReturnType<typeof createCodexProvider> | undefined
   let accessHandler: ReturnType<typeof createTextAccessApi>
   let chatHandler: ReturnType<typeof createChatApi>
+  let transcriptionHandler: ReturnType<typeof createTranscriptionApi>
 
   return {
     name: 'dot-live-api',
@@ -19,6 +21,7 @@ export function liveApiPlugin(): Plugin {
       const env = loadEnv(config.mode, config.envDir, '')
       const apiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY
       handler = createLiveApi(apiKey)
+      transcriptionHandler = createTranscriptionApi(apiKey)
       const provider = process.env.DOT_TEXT_PROVIDER || env.DOT_TEXT_PROVIDER || (development ? 'codex' : 'api')
       if (!['codex', 'api'].includes(provider)) throw new Error('DOT_TEXT_PROVIDER must be codex or api.')
       if (!development && config.command === 'serve' && provider === 'codex') {
@@ -33,11 +36,13 @@ export function liveApiPlugin(): Plugin {
       server.middlewares.use('/api/text-access', accessHandler)
       server.middlewares.use('/api/session', handler)
       server.middlewares.use('/api/chat', chatHandler)
+      server.middlewares.use('/api/transcription', transcriptionHandler)
     },
     configurePreviewServer(server) {
       server.middlewares.use('/api/text-access', accessHandler)
       server.middlewares.use('/api/session', handler)
       server.middlewares.use('/api/chat', chatHandler)
+      server.middlewares.use('/api/transcription', transcriptionHandler)
     },
   }
 }

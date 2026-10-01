@@ -1,6 +1,6 @@
 import { useCallback, useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from 'react'
-import { ArrowUpIcon, MessageCircleIcon } from 'lucide-react'
-import { motion, useReducedMotion } from 'motion/react'
+import { ArrowUpIcon, MessageCircleIcon, MicIcon, SquareIcon, CheckIcon, XIcon } from 'lucide-react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupTextarea } from '@/components/ui/input-group'
 import { CallButton } from '@/components/call-button'
@@ -8,10 +8,15 @@ import { MicrophoneWaveform } from '@/components/microphone-waveform'
 import type { CallStatus } from '@/lib/live-session'
 import { Button } from '@/components/ui/button'
 import { composerMorph, composerSize } from '@/lib/composer-size'
+import type { CaptureSnapshot, CaptureIntent } from '@/lib/audio-capture'
+import { Spinner } from '@/components/ui/spinner'
+import { surfaceHidden, surfaceVisible, surfaceExit, surfaceSpring, surfaceFade } from '@/lib/surface-motion'
 import { interfaceSounds } from '@/lib/interface-sounds'
 
 interface ConversationComposerProps {
   draft: string
+  showCall: boolean
+  dictation: CaptureSnapshot & { active: boolean; start: () => void; finish: (intent: CaptureIntent) => Promise<void>; cancel: () => void }
   onDraftChange: (draft: string) => void
   onSubmit: () => void
   onToggleCall: () => void
@@ -27,6 +32,8 @@ interface ConversationComposerProps {
 
 export function ConversationComposer({
   draft,
+  showCall,
+  dictation,
   onDraftChange,
   onSubmit,
   onToggleCall,
@@ -45,11 +52,20 @@ export function ConversationComposer({
   const rowRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ height: 36, expanded: false, scrollable: false })
   const visibleSize = draft.length ? size : { height: 36, expanded: false, scrollable: false }
-  const expanded = open && !calling && visibleSize.expanded
+  const expanded = open && !calling && !dictation.active && visibleSize.expanded
+  const editable = open && !calling && !dictation.active
+  const controlTransition = reducedMotion ? surfaceFade : surfaceSpring
+  const entrance = reducedMotion ? { opacity: 0 } : surfaceHidden
+  const exit = reducedMotion ? { opacity: 0 } : surfaceExit
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  useLayoutEffect(() => {
+    if (dictation.active) cancelRef.current?.focus({ preventScroll: true })
+  }, [dictation.active])
   const measure = useCallback(() => {
     const input = inputRef.current
     const row = rowRef.current
-    if (!input || !row || !open) return
+    if (!input || !row || !editable) return
     const styles = getComputedStyle(input)
     const previousHeight = input.style.height
     const previousWidth = input.style.width
@@ -70,7 +86,7 @@ export function ConversationComposer({
     // Keep the expansion threshold tied to the pill width, even after the
     // expanded field gains width. Otherwise wrapping could toggle it endlessly.
     const availableWidth = input.closest('form')!.parentElement!.clientWidth
-    input.style.width = `${Math.max(0, availableWidth - actionWidth - gap * 2)}px`
+    input.style.width = `${Math.max(0, availableWidth - actionWidth - gap * actions.length)}px`
     const compactHeight = input.scrollHeight + border
     const expanded = composerSize(compactHeight, lineHeight, padding).expanded
     if (expanded) input.style.width = `${Math.max(0, availableWidth - 12)}px`
@@ -88,12 +104,12 @@ export function ConversationComposer({
     input.scrollTop = next.scrollable ? previousScroll : 0
     setSize((previous) => previous.height === next.height && previous.expanded === next.expanded && previous.scrollable === next.scrollable
       ? previous : next)
-  }, [inputRef, open])
+  }, [inputRef, editable])
 
   useLayoutEffect(() => {
     const frame = requestAnimationFrame(measure)
     return () => cancelAnimationFrame(frame)
-  }, [draft, measure])
+  }, [draft, measure, showCall])
 
   useLayoutEffect(() => {
     const row = rowRef.current
@@ -116,6 +132,7 @@ export function ConversationComposer({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (dictation.active) return
     if (!draft.trim()) { onClose(); return }
     onSubmit()
   }
@@ -131,10 +148,10 @@ export function ConversationComposer({
       className="unified-composer-form"
       onSubmit={submit}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget) && !draft.trim()) onClose()
+        if (!dictation.active && !event.currentTarget.contains(event.relatedTarget) && !draft.trim()) onClose()
       }}
       initial={false}
-      animate={{ width: calling ? 236 : open ? '100%' : 78 }}
+      animate={{ width: dictation.active ? '100%' : calling ? 236 : open ? '100%' : showCall ? 120 : 78 }}
       transition={reducedMotion ? { duration: 0 } : composerMorph}
     >
       <FieldGroup>
@@ -146,15 +163,17 @@ export function ConversationComposer({
             data-expanded={expanded}
             data-open={open}
             data-calling={calling}
+            data-dictating={dictation.active}
+            data-show-call={showCall}
             initial={false}
-            animate={{ height: calling ? 36 : open ? visibleSize.height + (expanded ? 54 : 0) : 36, padding: expanded ? 6 : 0 }}
+            animate={{ height: calling || dictation.active ? 36 : open ? visibleSize.height + (expanded ? 54 : 0) : 36, padding: expanded ? 6 : 0 }}
             transition={reducedMotion ? { duration: 0 } : composerMorph}
           >
             <div className="conversation-composer-surface" aria-hidden="true" />
             <motion.div
               className="conversation-composer-field-wrap"
-              inert={!open}
-              aria-hidden={!open}
+              inert={!editable}
+              aria-hidden={!editable}
               initial={false}
               animate={{ height: visibleSize.height }}
               transition={reducedMotion ? { duration: 0 } : composerMorph}
@@ -181,16 +200,26 @@ export function ConversationComposer({
             <motion.div
               data-composer-action
               className="conversation-composer-send"
-              inert={calling}
-              aria-hidden={calling}
+              inert={calling || dictation.active}
+              aria-hidden={calling || dictation.active}
               initial={false}
-              animate={{ opacity: calling ? 0 : 1 }}
+              animate={{ opacity: calling || dictation.active ? 0 : 1 }}
               transition={reducedMotion ? { duration: 0 } : composerMorph}
             >
               <Button type={open ? 'submit' : 'button'} variant={open ? 'default' : 'secondary'} size="icon-lg" aria-label={open ? 'Send message' : 'Open text chat'} aria-expanded={open} aria-controls={`${labelId}-input`} disabled={open && busy} onClick={(event) => { if (!open) { event.preventDefault(); onOpen() } }}>
                 {open ? <ArrowUpIcon aria-hidden="true" /> : <MessageCircleIcon aria-hidden="true" />}
               </Button>
             </motion.div>
+            <AnimatePresence initial={false}>
+              {!calling && !dictation.active ? (
+                <motion.div key="microphone" data-composer-action className="conversation-composer-microphone"
+                  initial={entrance} animate={surfaceVisible} exit={exit} transition={controlTransition}>
+                  <Button type="button" variant="secondary" size="icon-lg" aria-label="Start recording" title="Start recording" disabled={busy} onClick={dictation.start}>
+                    <MicIcon aria-hidden="true" />
+                  </Button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
             <motion.div
               className="unified-voice-feedback"
               aria-hidden="true"
@@ -200,21 +229,53 @@ export function ConversationComposer({
             >
               <MicrophoneWaveform bands={inputBands} />
             </motion.div>
-            <motion.div
-              data-composer-action
-              className="conversation-composer-call"
-              initial={false}
-              animate={{ y: 0 }}
-              transition={reducedMotion ? { duration: 0 } : composerMorph}
-            >
-              <CallButton size="icon-lg" status={voiceStatus} hasError={hasVoiceError} onClick={() => {
-                if (!draft.trim()) onClose()
-                onToggleCall()
-              }} />
-            </motion.div>
+            <AnimatePresence initial={false}>
+              {showCall && !dictation.active ? (
+                <motion.div key="call" data-composer-action className="conversation-composer-call"
+                  initial={entrance} animate={surfaceVisible} exit={exit} transition={controlTransition}>
+                  <CallButton size="icon-lg" status={voiceStatus} hasError={hasVoiceError} onClick={() => {
+                    if (!draft.trim()) onClose()
+                    onToggleCall()
+                  }} />
+                </motion.div>
+              ) : null}
+              {dictation.active ? (
+                <motion.div key="dictation" className="conversation-dictation" data-status={dictation.status}
+                  initial={entrance} animate={surfaceVisible} exit={exit} transition={controlTransition}
+                  onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); dictation.cancel() } }}>
+                  <Button ref={cancelRef} type="button" variant="secondary" size="icon-lg" aria-label="Cancel recording" title="Discard recording" onClick={dictation.cancel}>
+                    <XIcon aria-hidden="true" />
+                  </Button>
+                  <AnimatePresence initial={false} mode="wait">
+                    <motion.div key={dictation.status} className="conversation-dictation-feedback"
+                      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(4px)' }}
+                      animate={{ opacity: 1, filter: 'blur(0px)' }}
+                      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, filter: 'blur(4px)' }} transition={controlTransition}>
+                      {dictation.status === 'recording' ? <MicrophoneWaveform bands={dictation.inputBands} /> : (
+                        <><Spinner aria-hidden="true" /><span>{dictation.status === 'starting' ? 'Starting recording' : 'Transcribing'}</span></>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                  <Button type="button" variant="secondary" size="icon-lg" aria-label="Stop recording and insert transcript" title="Stop and insert transcript" disabled={dictation.status !== 'recording'} onClick={() => { void dictation.finish('insert') }}>
+                    <SquareIcon aria-hidden="true" />
+                  </Button>
+                  <Button type="button" size="icon-lg" aria-label="Accept recording and send message" title="Transcribe and send message" disabled={dictation.status !== 'recording' || busy} onClick={() => { void dictation.finish('send') }}>
+                    <CheckIcon aria-hidden="true" />
+                  </Button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </motion.div>
         </Field>
       </FieldGroup>
+      <AnimatePresence initial={false}>
+        {dictation.error ? (
+          <motion.div className="conversation-dictation-error" initial={entrance} animate={surfaceVisible} exit={exit} transition={controlTransition}>
+            <p className="call-error" role="status">{dictation.error}</p>
+            <Button type="button" variant="ghost" size="icon-lg" aria-label="Dismiss recording error" onClick={dictation.cancel}><XIcon aria-hidden="true" /></Button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </motion.form>
   )
 }

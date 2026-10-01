@@ -9,6 +9,7 @@ const root = new URL('../', import.meta.url)
 const modules = new Map()
 async function componentModule(url) {
   if (modules.has(url.href)) return modules.get(url.href)
+  if (url.pathname.endsWith('/hooks/use-audio-capture.tsx')) return `data:text/javascript;base64,${Buffer.from('export const useAudioCapture = () => globalThis.__viewCapture ?? ({ status: "idle", error: null, inputBands: [], start: async () => {}, finalize: async () => null, cancel: () => {} });').toString('base64')}`
   let source
   try { source = await readFile(url, 'utf8') }
   catch (error) {
@@ -38,13 +39,16 @@ const base = {
 }
 const render = (props = {}) => renderToStaticMarkup(createElement(TextConversationView, { ...base, ...props }))
 
-test('idle renders chat and call with the same preset button size', () => {
+test('idle renders chat, microphone and call with the same preset button size', () => {
   const html = render()
   assert.match(html, /unified-orb-stage/)
   assert.match(html, /class="conversation-footer" data-idle="true"/)
   assert.match(html, /aria-label="Open text chat"/)
   assert.match(html, /aria-label="Start call"/)
-  assert.equal([...html.matchAll(/data-size="icon-lg"/g)].length, 2)
+  assert.match(html, /aria-label="Start recording"/)
+  assert.ok(html.indexOf('aria-label="Open text chat"') < html.indexOf('aria-label="Start recording"'))
+  assert.ok(html.indexOf('aria-label="Start recording"') < html.indexOf('aria-label="Start call"'))
+  assert.equal([...html.matchAll(/data-size="icon-lg"/g)].length, 3)
 })
 
 test('call phases hide chat from interaction and accessibility while preserving the call action', () => {
@@ -67,6 +71,8 @@ test('existing messages omit the large orb and render an open composer immediate
   assert.match(html, /data-open="true"/)
   assert.match(html, /aria-label="Send message"/)
   assert.match(html, /placeholder="Ask anything"/)
+  assert.doesNotMatch(html, /aria-label="Start call"/)
+  assert.match(html, /aria-label="Start recording"/)
   assert.match(html, /data-slot="message-scroller-viewport"/)
   assert.match(html, /role="region"/)
   assert.match(html, /role="log"/)
@@ -119,4 +125,54 @@ test('active calls place the waveform before the call action inside the same com
   const waveform = html.indexOf('class="unified-voice-feedback"')
   const formEnd = html.indexOf('</form>')
   assert.ok(waveform > 0 && call > waveform && formEnd > call)
+})
+
+const { ConversationComposer } = await import(await componentModule(new URL('src/components/conversation-composer.tsx', root)))
+const capture = { status: 'idle', error: null, inputBands: [], active: false, start() {}, async finish() {}, cancel() {} }
+const renderComposer = (dictation) => renderToStaticMarkup(createElement(ConversationComposer, {
+  draft: 'Existing draft', onDraftChange() {}, onSubmit() {}, onToggleCall() {}, showCall: true,
+  voiceStatus: 'idle', inputBands: [], hasVoiceError: false, open: true, onOpen() {}, onClose() {}, busy: false,
+  inputRef: { current: null }, dictation: { ...capture, ...dictation },
+}))
+
+test('recording replaces editable draft with reactive waveform and three named actions', () => {
+  const html = renderComposer({ status: 'recording', active: true, inputBands: Array(32).fill(0.4) })
+  assert.match(html, /class="conversation-composer-field-wrap" inert="" aria-hidden="true"/)
+  assert.match(html, /aria-label="Cancel recording"/)
+  assert.match(html, /aria-label="Stop recording and insert transcript"/)
+  assert.match(html, /aria-label="Accept recording and send message"/)
+  assert.match(html, /class="conversation-dictation-feedback"/)
+  assert.doesNotMatch(html, /aria-label="Start call"|aria-label="Start recording"/)
+  assert.ok(html.indexOf('aria-label="Cancel recording"') < html.indexOf('class="conversation-dictation-feedback"'))
+  assert.ok(html.indexOf('class="conversation-dictation-feedback"') < html.indexOf('aria-label="Stop recording'))
+})
+
+test('starting and processing keep cancellation available and prevent another finishing action', () => {
+  for (const status of ['starting', 'processing']) {
+    const html = renderComposer({ status, active: true })
+    assert.match(html, /aria-label="Cancel recording"[^>]*>/)
+    assert.match(html, /aria-label="Stop recording and insert transcript"[^>]*disabled=""/)
+    assert.match(html, /aria-label="Accept recording and send message"[^>]*disabled=""/)
+    assert.match(html, status === 'starting' ? /Starting recording/ : /Transcribing/)
+  }
+})
+
+test('recording errors keep the draft editable and expose explicit dismissal', () => {
+  const html = renderComposer({ status: 'error', error: 'Allow microphone access, then try again.' })
+  assert.match(html, /Existing draft/)
+  assert.match(html, /role="status">Allow microphone access/)
+  assert.match(html, /aria-label="Dismiss recording error"/)
+})
+
+
+test('capture state reaches the unified composer without replacing conversation messages', () => {
+  globalThis.__viewCapture = { ...capture, status: 'recording', inputBands: Array(32).fill(0.2), finalize: async () => null }
+  try {
+    const html = render({ turns: [{ id: 'one', userText: 'Hello', assistantText: 'Hi', status: 'complete', error: null }] })
+    assert.match(html, /data-dictating="true"/)
+    assert.match(html, /aria-label="Cancel recording"/)
+    assert.match(html, /Recording. Stop to insert the transcript/)
+    assert.match(html, /data-message-id="one"/)
+    assert.doesNotMatch(html, /aria-label="Start call"|aria-label="Start recording"/)
+  } finally { delete globalThis.__viewCapture }
 })

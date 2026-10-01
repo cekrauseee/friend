@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Ref } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Ref } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { AssistantMarkdown } from '@/components/assistant-markdown'
 import { CompactAgentOrb } from '@/components/compact-agent-orb'
@@ -15,6 +15,7 @@ import { MessageScroller, MessageScrollerProvider, MessageScrollerViewport, Mess
 import { Ellipsis } from 'lucide-react'
 import { interfaceSounds } from '@/lib/interface-sounds'
 import { useComposerShortcuts } from '@/hooks/use-composer-shortcuts'
+import { useComposerDictation } from '@/hooks/use-composer-dictation'
 import { surfaceHidden, surfaceVisible, surfaceExit, surfaceSpring, surfaceFade } from '@/lib/surface-motion'
 
 const MotionMessageScroller = motion.create(MessageScroller)
@@ -131,7 +132,11 @@ export function TextConversationView({
   const scene = useConversationScene(showLargeOrb, sceneRef, footerRef, orbRef)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const openComposer = useCallback(() => setRequestedOpen(true), [])
-  useComposerShortcuts({ enabled: ready && !calling, open: composerOpen, inputRef, onOpen: openComposer, onDraftChange: setDraft })
+  const dictation = useComposerDictation({ draft, enabled: ready && !calling && activeTurnId === null, onDraftChange: setDraft, onSend, onOpen: openComposer })
+  const callAllowed = useRef(false)
+  useLayoutEffect(() => { callAllowed.current = !dictation.active && turns.length === 0 }, [dictation.active, turns.length])
+  const toggleCall = () => { if (callAllowed.current) { dictation.cancel(); onToggleCall() } }
+  useComposerShortcuts({ enabled: ready && !calling && !dictation.active, open: composerOpen, inputRef, onOpen: openComposer, onDraftChange: setDraft })
   const reducedMotion = useReducedMotion()
   const latest = turns.at(-1)
   const voiceAnnouncement = voiceStatus === 'connecting' ? 'Connecting call.'
@@ -143,12 +148,13 @@ export function TextConversationView({
         : latest?.status === 'failed' ? 'Answer failed. Retry is available.' : ''
 
   useEffect(() => {
-    if (!ready || !composerOpen) return
+    if (!ready || !composerOpen || dictation.active) return
     const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
     return () => cancelAnimationFrame(frame)
-  }, [ready, composerOpen])
+  }, [ready, composerOpen, dictation.active])
 
   function sendDraft() {
+    if (dictation.active) return
     const acceptedId = onSend(draft)
     if (acceptedId !== null) setDraft('')
   }
@@ -240,7 +246,9 @@ export function TextConversationView({
               draft={draft}
               onDraftChange={setDraft}
               onSubmit={sendDraft}
-              onToggleCall={onToggleCall}
+              onToggleCall={toggleCall}
+              showCall={turns.length === 0}
+              dictation={{ ...dictation, cancel: () => { dictation.cancel(); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })) } }}
               voiceStatus={voiceStatus}
               inputBands={inputBands}
               hasVoiceError={Boolean(displayedVoiceError)}
@@ -263,6 +271,7 @@ export function TextConversationView({
         </motion.div>
         <span className="sr-only" role="status" aria-live="polite">{announcement}</span>
         <span className="sr-only" role="status" aria-live="polite">{voiceAnnouncement}</span>
+        <span className="sr-only" role="status" aria-live="polite">{dictation.status === 'starting' ? 'Waiting for microphone access.' : dictation.status === 'recording' ? 'Recording. Stop to insert the transcript, or accept to send.' : dictation.status === 'processing' ? 'Transcribing recording.' : ''}</span>
       </motion.section>
     </MessageScrollerProvider>
   )

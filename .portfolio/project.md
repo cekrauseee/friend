@@ -60,6 +60,19 @@ some visible updates with small variations in timing, gain, and playback rate.
 The preference is persistent and can be muted; no audio or conversation history
 is saved by the application.
 
+## Dictating a text message
+
+The microphone control records locally and reuses the fixed waveform for input
+feedback. Stop transcribes with GPT Transcribe and appends the result to the
+existing draft; Check submits the same merged text through the text conversation.
+Cancel discards the recording and preserves the draft. Calls and dictation are
+mutually exclusive, and the call control disappears once text messages exist.
+
+Only Stop or Check uploads audio. Recordings are bounded to five minutes and
+25,000,000 bytes, and resources close on completion, cancellation and failure.
+Transcription uses the server's API key independently of Codex sign-in. Errors
+leave the draft intact and remain available for dismissal or retry.
+
 ## Keeping signaling separate from audio
 
 The browser requests microphone permission and creates a WebRTC connection. A
@@ -95,12 +108,13 @@ than leaving a silent call connected.
 
 Dot has no application user database, saved conversations, or recordings.
 Local text development uses the user's Codex-managed ChatGPT account. Interface
-sound preferences are stored locally; transcripts remain in browser memory. It does not request OpenAI session storage. The signaling endpoint
-accepts matching localhost origins; publishing a service for other users would
+sound preferences are stored locally; transcripts remain in browser memory. It does not request OpenAI session storage. The signaling and transcription endpoints
+accept matching localhost origins; publishing a service for other users would
 require authentication and request controls around the paid API.
 
 Focused unit tests cover the session contract, input/output separation,
-cancellation, playback failure, cleanup, waveform behavior, authentication,
+cancellation, playback failure, cleanup, waveform behavior, deferred dictation
+uploads, recording limits, transcript insertion and sending, authentication,
 paced text, spacer consumption, keyboard editing, and sound selection. Local Chrome
 verification confirmed playback with synthetic audio. A complete conversation
-against OpenAI remains a separate live validation step.
+against OpenAI and real microphone dictation remain separate live validation steps.

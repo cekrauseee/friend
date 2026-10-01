@@ -1,6 +1,16 @@
+packages:
+  - "apps/*"
+  - "packages/*"
 minimumReleaseAgeExclude:
+  - '@turbo/darwin-64@2.11.6'
+  - '@turbo/darwin-arm64@2.11.6'
+  - '@turbo/linux-64@2.11.6'
+  - '@turbo/linux-arm64@2.11.6'
+  - '@turbo/windows-64@2.11.6'
+  - '@turbo/windows-arm64@2.11.6'
+  - turbo@2.11.6
   - openai@7.25.0
-  - '@streamdown/code@2.0.0'
-  - '@streamdown/mermaid@1.0.3'
+  - "@streamdown/code@2.0.0"
+  - "@streamdown/mermaid@1.0.3"
   - remend@1.4.0
   - streamdown@2.7.0

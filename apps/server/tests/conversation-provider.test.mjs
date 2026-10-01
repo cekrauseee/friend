@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import OpenAI from 'openai'
-import { ChatError, createApiChatProvider } from '../server/conversation-provider.ts'
-import { ChatError as HttpChatError } from '../server/chat-api.ts'
-import { conversationConfig, conversationInstructions } from '../server/conversation-config.ts'
-import { sessionConfig } from '../server/session-config.ts'
+import { ChatError, createApiChatProvider } from '../src/conversation-provider.ts'
+import { ChatError as HttpChatError } from '../src/chat-api.ts'
+import { conversationConfig, conversationInstructions } from '../src/conversation-config.ts'
+import { sessionConfig } from '../src/session-config.ts'
 
 const history = [
   { role: 'user', content: 'Remember this' },

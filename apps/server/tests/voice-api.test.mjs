@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import { test } from 'node:test'
-import { createVoiceApis, voiceProvider } from '../server/voice-api.ts'
+import { createVoiceApis, voiceProvider } from '../src/voice-api.ts'
 
 function exchange({ method = 'POST', origin = 'http://localhost:5173', extraHeaders = {} } = {}) {
   const req = Readable.from([])

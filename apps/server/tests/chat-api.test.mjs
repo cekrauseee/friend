@@ -4,8 +4,8 @@ import { createServer, request as httpRequest } from 'node:http'
 import { Readable } from 'node:stream'
 import { test } from 'node:test'
 import OpenAI from 'openai'
-import { createChatApi } from '../server/chat-api.ts'
-import { conversationInstructions } from '../server/conversation-config.ts'
+import { createChatApi } from '../src/chat-api.ts'
+import { conversationInstructions } from '../src/conversation-config.ts'
 
 const history = [
   { role: 'user', content: 'Hello' },

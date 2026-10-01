@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os'
 import { spawn, spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { test } from 'node:test'
-import { createCodexProcess, resolveCodexAuthHome } from '../server/codex-process.ts'
-import { createCodexProvider } from '../server/codex-provider.ts'
+import { createCodexProcess, resolveCodexAuthHome } from '../src/codex-process.ts'
+import { createCodexProvider } from '../src/codex-provider.ts'
 const tick = () => new Promise((r) => setImmediate(r))
 
 test('new sign-in profiles use Dot while existing profiles remain available after renaming', async () => {

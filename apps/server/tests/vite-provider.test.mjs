@@ -5,7 +5,7 @@ import { Readable } from 'node:stream'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { liveApiPlugin } from '../server/vite-plugin.ts'
+import { liveApiPlugin } from '../src/vite-plugin.ts'
 
 test('Codex is development-only; explicit Codex selection never falls back to API in preview', async () => {
   const envDir = await mkdtemp(join(tmpdir(), 'dot-vite-test-'))

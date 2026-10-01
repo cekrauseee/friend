@@ -4,8 +4,8 @@ import { createServer, request as httpRequest } from 'node:http'
 import { Readable, PassThrough } from 'node:stream'
 import { test } from 'node:test'
 import OpenAI from 'openai'
-import { createElevenLabsTranscriptionProvider } from '../server/transcription-provider.ts'
-import { createProviderTranscriptionApi, createTranscriptionApi } from '../server/transcription-api.ts'
+import { createElevenLabsTranscriptionProvider } from '../src/transcription-provider.ts'
+import { createProviderTranscriptionApi, createTranscriptionApi } from '../src/transcription-api.ts'
 
 const webm = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x80, 0x01])
 const mp4 = Buffer.from([0, 0, 0, 16, ...Buffer.from('ftypisom'), 0, 0, 0, 0])

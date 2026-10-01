@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
-import { createCodexProvider, createTextAccessApi, validAuthUrl } from '../server/codex-provider.ts'
-import { createChatApi } from '../server/chat-api.ts'
-import { conversationConfig, conversationInstructions } from '../server/conversation-config.ts'
+import { createCodexProvider, createTextAccessApi, validAuthUrl } from '../src/codex-provider.ts'
+import { createChatApi } from '../src/chat-api.ts'
+import { conversationConfig, conversationInstructions } from '../src/conversation-config.ts'
 
 const tick = () => new Promise((resolve) => setImmediate(resolve))
 const messages = [{ role: 'user', content: 'Hi' }]

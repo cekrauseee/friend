@@ -4,9 +4,9 @@ import { createServer } from 'node:http'
 import { once } from 'node:events'
 import { test } from 'node:test'
 import { WebSocket } from 'ws'
-import { createSpeechEngineBridge } from '../server/speech-engine.ts'
-import { createSpeechEngineAdmission } from '../server/speech-engine-admission.ts'
-import { verifySpeechEngineAuthorization } from '../server/speech-engine-auth.ts'
+import { createSpeechEngineBridge } from '../src/speech-engine.ts'
+import { createSpeechEngineAdmission } from '../src/speech-engine-admission.ts'
+import { verifySpeechEngineAuthorization } from '../src/speech-engine-auth.ts'
 
 const key = 'local-test-secret'
 const claims = () => ({

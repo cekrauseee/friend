@@ -3,7 +3,6 @@ import babel from '@rolldown/plugin-babel'
 import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
-import { liveApiPlugin } from './server/vite-plugin.ts'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -11,7 +10,6 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset()] }),
     tailwindcss(),
-    liveApiPlugin(),
   ],
   resolve: {
     alias: {

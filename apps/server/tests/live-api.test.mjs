@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
 import { test } from 'node:test'
 import OpenAI from 'openai'
-import { createLiveApi } from '../server/live-api.ts'
+import { createLiveApi } from '../src/live-api.ts'
 
 async function request(handler, { origin = 'http://localhost:5173', body = { sdp: 'v=0\r\no=browser' } } = {}) {
   const req = Readable.from([JSON.stringify(body)])

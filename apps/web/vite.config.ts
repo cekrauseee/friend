@@ -3,6 +3,7 @@ import babel from '@rolldown/plugin-babel'
 import { defineConfig, loadEnv } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
+import { browserBoundary } from './build/browser-boundary.ts'
 
 /** Proxy only API traffic; retain the browser Origin for the server policy. */
 export function createApiProxy(target = 'http://127.0.0.1:3000') {
@@ -20,6 +21,7 @@ export default defineConfig(({ mode }) => {
     server: { proxy },
     preview: { proxy },
     plugins: [
+      browserBoundary(),
       react(),
       babel({ presets: [reactCompilerPreset()] }),
       tailwindcss(),

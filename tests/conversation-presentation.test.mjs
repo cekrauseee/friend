@@ -25,3 +25,10 @@ test('every active call phase hides chat, and finishing restores the existing co
   }
   assert.equal(conversationPresentation(1, 'idle', false, '').composerOpen, true)
 })
+
+test('call preflight preserves the current draft and composer presentation', () => {
+  assert.deepEqual(conversationPresentation(0, 'checking', true, 'draft'), {
+    calling: false, showLargeOrb: true, composerOpen: true,
+  })
+  assert.equal(conversationPresentation(0, 'checking', false, '').composerOpen, false)
+})

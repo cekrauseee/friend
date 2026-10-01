@@ -24,7 +24,7 @@ function App() {
 
   useEffect(() => {
     const previous = previousFeedback.current
-    interfaceSounds.setVoiceActive(['connecting', 'connected', 'closing'].includes(voice.status))
+    interfaceSounds.setVoiceActive(['checking', 'connecting', 'connected', 'closing'].includes(voice.status))
     if (voice.status === 'error' && voice.error && voice.error !== previous.voiceError) interfaceSounds.play('error')
     else if (voice.status === 'idle' && ['connected', 'closing'].includes(previous.voiceStatus)) interfaceSounds.play('callEnded')
     if (access.authenticated === true && previous.authenticated !== true) interfaceSounds.play('authenticated')

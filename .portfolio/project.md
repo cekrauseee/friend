@@ -63,15 +63,18 @@ is saved by the application.
 ## Dictating a text message
 
 The microphone control records locally and reuses the fixed waveform for input
-feedback. Stop transcribes with GPT Transcribe and appends the result to the
+feedback. Stop transcribes with the selected provider and appends the result to the
 existing draft; Check submits the same merged text through the text conversation.
 Cancel discards the recording and preserves the draft. Calls and dictation are
 mutually exclusive, and the call control disappears once text messages exist.
 
 Only Stop or Check uploads audio. Recordings are bounded to five minutes and
 25,000,000 bytes, and resources close on completion, cancellation and failure.
-Transcription uses the server's API key independently of Codex sign-in. Errors
-leave the draft intact and remain available for dismissal or retry.
+Transcription independently selects OpenAI GPT Transcribe or ElevenLabs Scribe v2
+through server-only configuration and credentials. OpenAI remains the default;
+ElevenLabs detects language automatically with audio-event tagging and speaker
+diarization disabled. There is no automatic fallback, and Codex sign-in is
+separate. Errors leave the draft intact and remain available for dismissal or retry.
 
 ## Keeping signaling separate from audio
 
@@ -118,3 +121,6 @@ uploads, recording limits, transcript insertion and sending, authentication,
 paced text, spacer consumption, keyboard editing, and sound selection. Local Chrome
 verification confirmed playback with synthetic audio. A complete conversation
 against OpenAI and real microphone dictation remain separate live validation steps.
+Scribe v2 account access and transcription quality have not been verified with live
+requests. Uploaded recordings follow the selected provider’s data policy, retention
+settings and billing even though Dot keeps no local recording history.

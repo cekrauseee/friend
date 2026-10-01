@@ -29,7 +29,9 @@ export function VoiceStage({
   const callRef = useRef<HTMLButtonElement>(null)
   const reducedMotion = useReducedMotion()
   const active = status === 'connecting' || status === 'connected' || status === 'closing'
-  const announcement = status === 'connecting'
+  const announcement = status === 'checking'
+    ? 'Checking call configuration. Activate the call button again to cancel.'
+    : status === 'connecting'
     ? 'Connecting. Activate the call button again to cancel.'
     : status === 'connected'
       ? 'Call connected.'

@@ -4,7 +4,8 @@ import { createServer, request as httpRequest } from 'node:http'
 import { Readable, PassThrough } from 'node:stream'
 import { test } from 'node:test'
 import OpenAI from 'openai'
-import { createTranscriptionApi } from '../server/transcription-api.ts'
+import { createElevenLabsTranscriptionProvider } from '../server/transcription-provider.ts'
+import { createProviderTranscriptionApi, createTranscriptionApi } from '../server/transcription-api.ts'
 
 const webm = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x80, 0x01])
 const mp4 = Buffer.from([0, 0, 0, 16, ...Buffer.from('ftypisom'), 0, 0, 0, 0])
@@ -204,4 +205,143 @@ test('oversized uploads receive HTTP 413 without destroying the local socket fir
     server.closeAllConnections()
     await new Promise((resolve) => server.close(resolve))
   }
+})
+
+function elevenLabs(fetcher, key) {
+  return createProviderTranscriptionApi(createElevenLabsTranscriptionProvider(arguments.length < 2 ? 'test-only' : key, fetcher),
+    'Dictation requires an ElevenLabs API key on the local server.')
+}
+
+test('Scribe uploads the completed recording once with exact dictation options and detected language', async () => {
+  for (const [raw, media, filename] of [[webm, 'audio/webm;codecs=opus', 'recording.webm'],
+    [mp4, 'audio/mp4', 'recording.mp4'], [mp4, 'video/mp4', 'recording.mp4']]) {
+    let calls = 0
+    const res = await request(elevenLabs(async (url, init) => {
+      calls++
+      assert.equal(url, 'https://api.elevenlabs.io/v1/speech-to-text')
+      assert.equal(init.method, 'POST')
+      assert.deepEqual(init.headers, { 'xi-api-key': 'test-only' })
+      assert.equal(init.signal.aborted, false)
+      const form = init.body
+      assert.deepEqual([...form.keys()].sort(), ['diarize', 'file', 'model_id', 'tag_audio_events'])
+      assert.equal(form.get('model_id'), 'scribe_v2')
+      assert.equal(form.get('diarize'), 'false')
+      assert.equal(form.get('tag_audio_events'), 'false')
+      const file = form.get('file')
+      assert.equal(file.name, filename)
+      assert.equal(file.type, media.split(';')[0])
+      assert.deepEqual(Buffer.from(await file.arrayBuffer()), raw)
+      return Response.json({ text: '  Olá\nworld  ', language_code: 'pt', words: [] })
+    }), { raw, media })
+    assert.equal(res.status, 200)
+    assert.deepEqual(res.body, { text: 'Olá\nworld' })
+    assert.equal(calls, 1)
+  }
+})
+
+test('Scribe errors are safe and do not retry or fall back to another provider', async () => {
+  for (const [upstreamStatus, status, code] of [
+    [401, 503, 'access_denied'], [403, 503, 'access_denied'],
+    [429, 429, 'rate_limited'], [408, 504, 'timeout'], [504, 504, 'timeout'],
+    [422, 502, 'upstream_error'], [500, 502, 'upstream_error'],
+  ]) {
+    let calls = 0
+    let upstream
+    const res = await request(elevenLabs(async () => {
+      calls++
+      upstream = new Response('private upstream details', { status: upstreamStatus })
+      return upstream
+    }))
+    assert.equal(res.status, status)
+    assert.equal(res.body.error.code, code)
+    assert.equal(calls, 1)
+    assert.equal(upstream.bodyUsed, true)
+  }
+  for (const result of [{ text: '' }, { text: ' \n' }, { text: 42 }, {}, null]) {
+    const res = await request(elevenLabs(async () => Response.json(result)))
+    assert.equal(res.status, 502)
+    assert.equal(res.body.error.code, 'empty_transcript')
+  }
+  for (const fetcher of [async () => new Response('private malformed upstream details'),
+    async () => { throw new Error('private network details') }]) {
+    const res = await request(elevenLabs(fetcher))
+    assert.equal(res.status, 502)
+    assert.equal(res.body.error.code, 'upstream_error')
+    assert.ok(!JSON.stringify(res.body).includes('private'))
+  }
+})
+
+test('Scribe missing configuration and invalid uploads never call the provider', async () => {
+  let calls = 0
+  const fetcher = async () => { calls++; return Response.json({ text: 'Hello' }) }
+  for (const key of [undefined, '', '  ']) {
+    assert.equal((await request(elevenLabs(fetcher, key))).body.error.code, 'not_configured')
+  }
+  const res = await request(elevenLabs(fetcher), { raw: Buffer.from('invalid') })
+  assert.equal(res.status, 400)
+  assert.equal(calls, 0)
+})
+
+test('disconnect genuinely aborts the Scribe fetch and suppresses results', async () => {
+  const { req, res } = exchange()
+  let started
+  const ready = new Promise((resolve) => { started = resolve })
+  let signal
+  let rejected = false
+  const pending = elevenLabs(async (_url, init) => {
+    signal = init.signal
+    started()
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => { rejected = true; reject(signal.reason) }, { once: true })
+    })
+  })(req, res)
+  await ready
+  res.emit('close')
+  await pending
+  assert.equal(signal.aborted, true)
+  assert.equal(rejected, true)
+  assert.equal(res.status, undefined)
+  assert.equal(res.listenerCount('close'), 0)
+  assert.equal(req.listenerCount('aborted'), 0)
+})
+
+test('Scribe response parsing remains covered by the endpoint deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const { req, res } = exchange()
+  let started
+  const ready = new Promise((resolve) => { started = resolve })
+  let signal
+  const pending = elevenLabs(async (_url, init) => {
+    signal = init.signal
+    return { ok: true, json: () => {
+      started()
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    } }
+  })(req, res)
+  await ready
+  t.mock.timers.tick(120_000)
+  await pending
+  assert.equal(signal.aborted, true)
+  assert.equal(res.status, 504)
+  assert.equal(res.body.error.code, 'timeout')
+})
+
+test('Scribe quota errors use the safe limit message, with bounded error parsing', async () => {
+  for (const status of [400, 401]) {
+    const res = await request(elevenLabs(async () => Response.json({
+      detail: { status: 'quota_exceeded', message: 'private account details' },
+    }, { status })))
+    assert.equal(res.status, 429)
+    assert.equal(res.body.error.code, 'rate_limited')
+    assert.ok(!JSON.stringify(res.body).includes('private'))
+  }
+  let cancelled = false
+  const res = await request(elevenLabs(async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new Uint8Array(16_385)) },
+    cancel() { cancelled = true },
+  }), { status: 401 })))
+  assert.equal(res.body.error.code, 'access_denied')
+  assert.equal(cancelled, true)
 })

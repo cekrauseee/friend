@@ -1,6 +1,6 @@
 # Dot
 
-A minimal voice and text companion built with React, TypeScript, and Vite. Start a call, speak naturally, and hear the model respond. A small pixel orb reacts to the model's audio; fixed waveform bars react to your microphone.
+A minimal voice and text companion built with React, TypeScript, Vite, and an independent Node.js/Hono backend in a pnpm/Turborepo workspace. Start a call, speak naturally, and hear the model respond. A small pixel orb reacts to the model's audio; fixed waveform bars react to your microphone.
 
 The interface follows the system’s light or dark appearance, with neutral surfaces, solid controls, and restrained motion. The call button turns red when it ends or cancels a call. Text replies render in a shared transcript; controls, accessible labels, and contextual errors are in English.
 
@@ -8,7 +8,7 @@ The [portfolio case study](.portfolio/project.md) documents the interaction, arc
 
 ## Run locally
 
-Use Node.js 22.18+ and pnpm.
+Use Node.js 22.18+ and pnpm 11.10.0 (declared in `packageManager`).
 
 ```sh
 pnpm install
@@ -23,9 +23,9 @@ Voice and dictation default to OpenAI: set `OPENAI_API_KEY` in `.env.local` to a
 pnpm dev
 ```
 
-Open the localhost URL printed by Vite. Select the phone button. The app checks the selected provider’s local configuration before showing the call waveform; ElevenLabs also validates the Speech Engine and obtains its token first. Allow microphone access when startup proceeds. When connected, speak normally. Select the red button to end the call. Selecting it while connecting cancels setup.
+`pnpm dev` starts the web app and backend independently through Turbo. Open the localhost URL printed by Vite (normally port 5173); the HTTP API normally listens at `127.0.0.1:3000`. Select the phone button. The app checks the selected provider’s local configuration before showing the call waveform; ElevenLabs also validates the Speech Engine and obtains its token first. Allow microphone access when startup proceeds. When connected, speak normally. Select the red button to end the call. Selecting it while connecting cancels setup.
 
-Keys and provider settings are read only by the local server. Never use a `VITE_` prefix for them; that would expose them to the browser. Environment files are ignored by Git. Restart the development server after changing configuration.
+Keys and provider settings are read only by the local server. Never use a `VITE_` prefix for them; that would expose them to the browser. Environment files are ignored by Git. Restart the backend after changing server configuration. Root `.env`, `.env.local`, and mode-specific files are loaded relative to the repository root from both source and compiled output; process variables take precedence. Web public routing settings belong in `apps/web/.env.local`, using `apps/web/.env.example` as a reference. Root setup synchronizes only the server environment file.
 
 Microphone access requires a supported browser on localhost or HTTPS. The orb requires WebGL. Calls are billed by the selected provider under the configured account; ElevenLabs usage includes Speech Engine audio; cognition is billed under the selected API or ChatGPT account.
 
@@ -43,11 +43,11 @@ Incoming deltas are buffered for display with a seeded, non-cyclic rhythm. The v
 
 UI SFX uses the Zen pack with a quiet master gain. Typing, sending, completion, retry, errors, sign-in, and call-ending feedback use short semantic cues; scrolling and other hover stay silent. Entering a palette color plays a quieter typing cue with a short cooldown. Agent typing selects sounds only on newly displayed content, with variable eligibility, occasional omissions, and small gain/rate changes. Recovery and final draining reduce its gain. Interface effects are suspended during voice calls and hidden-page updates. The accessible sound toggle persists its preference in localStorage; transcript and audio are not persisted. Existing mute preferences from the previous project name are preserved.
 
-Use `DOT_TEXT_PROVIDER=codex` (the development default) or `DOT_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. OpenAI voice and OpenAI dictation use that key; ElevenLabs voice and dictation use their independent provider selections with the server-only ElevenLabs key. Dictation does not use Codex or ChatGPT authentication. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `DOT_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
+Use `DOT_TEXT_PROVIDER=codex` or `DOT_TEXT_PROVIDER=api` in root `.env.local`, then restart the backend. An empty or omitted value defaults to Codex in development and API in production. The API option uses the existing project key and its API billing. OpenAI voice and OpenAI dictation use that key; ElevenLabs voice and dictation use their independent provider selections with the server-only ElevenLabs key. Dictation does not use Codex or ChatGPT authentication. There is no fallback from a failed Codex request to the API. Production backend startup selects API cognition by default and rejects explicit Codex selection. Web preview serves only the frontend and proxies `/api` to the separately running backend.
 
 The Codex integration requires **Codex CLI 0.156.1**. This version is checked during initialization because environment isolation is verified against its protocol; other versions fail closed. Install that version through the official [Codex CLI instructions](https://learn.chatgpt.com/docs/cli). After upgrading the adapter, re-run the local CLI protocol test before changing the supported version.
 
-Dot starts one local `codex app-server` process on demand. It uses Codex-managed ChatGPT authentication and a separate `CODEX_HOME` at `~/.local/share/dot/codex`, so signing in to the desktop app or another CLI profile does not sign you in here. Codex stores its managed credentials there; do not commit or share that directory. To sign out, stop Vite and run `CODEX_HOME="$HOME/.local/share/dot/codex" codex logout`. Existing profiles from the previous project name are reused automatically; for those profiles, use their existing directory when running logout. The child inherits only `PATH` and this dedicated `CODEX_HOME`. Tokens and raw upstream errors never reach the browser.
+Dot starts one local `codex app-server` process on demand. It uses Codex-managed ChatGPT authentication and a separate `CODEX_HOME` at `~/.local/share/dot/codex`, so signing in to the desktop app or another CLI profile does not sign you in here. Codex stores its managed credentials there; do not commit or share that directory. To sign out, stop the backend and run `CODEX_HOME="$HOME/.local/share/dot/codex" codex logout`. Existing profiles from the previous project name are reused automatically; for those profiles, use their existing directory when running logout. The child inherits only `PATH` and this dedicated `CODEX_HOME`. Tokens and raw upstream errors never reach the browser.
 
 Every reply requests `gpt-6-luna` with reasoning `none`. Account authentication permits sending text messages; it does not prove access to the model. Only a completed inference proves model access for that request. Model or subscription limits appear as reply errors, without changing the model or provider. Live account access has not been verified by the automated tests.
 
@@ -73,7 +73,7 @@ Stopping capture releases microphone tracks and its audio meter before upload. C
 
 ## OpenAI configuration
 
-The server configures voice sessions in [`server/session-config.ts`](server/session-config.ts) and the OpenAI dictation adapter in [`server/transcription-provider.ts`](server/transcription-provider.ts):
+The server configures voice sessions in [`apps/server/src/session-config.ts`](apps/server/src/session-config.ts) and the OpenAI dictation adapter in [`apps/server/src/transcription-provider.ts`](apps/server/src/transcription-provider.ts):
 
 | Setting | Value |
 | --- | --- |
@@ -84,11 +84,11 @@ The server configures voice sessions in [`server/session-config.ts`](server/sess
 | Tools | None |
 | Tool choice | `none` |
 
-GPT-Live handles the spoken conversation and delegates to Luna when needed. Its supported Responses delegation settings share the canonical instructions and cognitive settings from `server/conversation-config.ts` with API text, Codex text and Speech Engine. There are no model selectors or advanced settings in the interface.
+GPT-Live handles the spoken conversation and delegates to Luna when needed. Its supported Responses delegation settings share the canonical instructions and cognitive settings from `apps/server/src/conversation-config.ts` with API text, Codex text and Speech Engine. There are no model selectors or advanced settings in the interface.
 
 ## ElevenLabs Speech Engine configuration
 
-Set `DOT_VOICE_PROVIDER=elevenlabs` for Speech Engine calls, or `openai` (the default) for GPT-Live. `DOT_TEXT_PROVIDER` selects the same cognitive provider instance for text and Speech Engine: development defaults to Codex, while preview requires API cognition. Dictation retains its independent selection. Invalid selections fail during initialization; failures never switch providers.
+Set `DOT_VOICE_PROVIDER=elevenlabs` for Speech Engine calls, or `openai` (the default) for GPT-Live. `DOT_TEXT_PROVIDER` selects the same cognitive provider instance for text and Speech Engine: development defaults to Codex, while production defaults to API cognition and rejects Codex. Dictation retains its independent selection. Invalid selections fail during initialization; failures never switch providers.
 
 Prepare an existing Speech Engine using the official [quickstart](https://elevenlabs.io/docs/eleven-api/guides/cookbooks/speech-engine) and [create/update API](https://elevenlabs.io/docs/api-reference/speech-engine/create), outside Dot. Configure:
 
@@ -98,7 +98,7 @@ Prepare an existing Speech Engine using the official [quickstart](https://eleven
 
 Put its `seng_...` ID in server-only `ELEVENLABS_SPEECH_ENGINE_ID` and an existing authorized key in `ELEVENLABS_API_KEY`. Dot reads and validates that engine before each call, then requests a short-lived WebRTC conversation token. It never creates or edits remote engines and does not use a hosted agent LLM, published-agent version or agent prompt.
 
-For selected ElevenLabs voice, both `pnpm dev` and `pnpm preview` start a dedicated upstream listener when its API key is configured at `127.0.0.1:3001`. Set `DOT_SPEECH_ENGINE_HOST` and `DOT_SPEECH_ENGINE_PORT` only if your ingress needs different binding. Configure your public TLS ingress to forward WebSocket upgrades at `/speech-engine/upstream` to this listener and preserve `X-Elevenlabs-Speech-Engine-Authorization`. Forward only this listener; keep the Vite port and `/api/text-access`, chat and session routes private. Ordinary HTTP requests to the listener return 404. Listener binding failure stops startup with a configuration error; shutdown closes its sockets and cancels inference.
+For selected ElevenLabs voice, the backend starts a dedicated upstream listener when its API key is configured, normally at `127.0.0.1:3001`. Web dev and preview never start this listener. Set `DOT_SPEECH_ENGINE_HOST` and `DOT_SPEECH_ENGINE_PORT` only if your ingress needs different binding. Configure your public TLS ingress to forward WebSocket upgrades at `/speech-engine/upstream` to this listener and preserve `X-Elevenlabs-Speech-Engine-Authorization`. Forward only this listener; keep web and private API ingress separate, and keep `/api/text-access`, chat and session routes private. Ordinary HTTP requests to the listener return 404. Listener binding failure stops startup with a configuration error; shutdown closes its sockets and cancels inference.
 
 The [upstream protocol](https://elevenlabs.io/docs/api-reference/speech-engine/speech-engine-upstream) authenticates ElevenLabs using its HS256 JWT with the SHA-256 digest of the configured API key, required issuer/subject and expiration. Each conversation must also consume a bounded, expiring admission issued by Dot's local token endpoint. Accepted full history maps `agent` to `assistant` and goes directly to shared cognition; the bridge streams response fragments and a final marker to ElevenLabs for speech synthesis. Histories remain session-scoped and are not saved locally.
 
@@ -122,45 +122,50 @@ Dot does not persist audio or transcripts and does not request OpenAI session st
 
 ## Project structure
 
-- `src/App.tsx` composes the interface.
-- `src/components/dot-orb.tsx` visualizes model audio.
-- `src/components/call-button.tsx` presents call actions.
-- `src/components/microphone-waveform.tsx` presents the fixed microphone waveform.
-- `src/hooks/use-live-session.ts` connects React to the session lifecycle.
-- `src/lib/voice-session.ts` selects the server-configured engine and maintains the shared call lifecycle.
-- `src/lib/elevenlabs-conversation.ts` adapts the official ElevenLabs conversation SDK.
-- `src/lib/live-session.ts` owns OpenAI WebRTC, events, cancellation, and cleanup.
-- `src/lib/audio-meter.ts` analyses input and output streams separately.
-- `src/lib/webrtc.ts` waits for ICE gathering.
-- `server/session-config.ts` holds OpenAI voice configuration.
-- `server/conversation-config.ts` and `server/conversation-provider.ts` define shared cognition.
-- `server/speech-engine.ts` authenticates and serves the upstream protocol.
-- `server/speech-engine-server.ts` owns the isolated upstream listener and cleanup.
-- `server/live-api.ts` validates local requests and calls the OpenAI SDK.
-- `server/voice-api.ts` validates Speech Engine configuration and returns admitted conversation tokens.
-- `server/transcription-api.ts` validates bounded recordings and requests transcription.
-- `server/transcription-provider.ts` adapts OpenAI GPT Transcribe and ElevenLabs Scribe v2 behind the same recording contract.
-- `src/lib/audio-capture.ts` owns local recording, frequency bands, cancellation, and cleanup.
-- `src/lib/transcription-client.ts` uploads completed recordings and handles safe transcription errors.
-- `src/hooks/use-audio-capture.ts` connects React to the capture lifecycle.
-- `src/hooks/use-composer-dictation.ts` applies transcripts to drafts and accepted text sends.
-- `server/codex-process.ts` manages the isolated Codex stdio process.
-- `server/codex-provider.ts` owns ChatGPT authentication and text streaming.
-- `src/lib/text-access.ts` owns startup authentication and sign-in state.
-- `src/components/text-conversation-view.tsx` presents the unified transcript, composer, and call controls.
-- `src/components/compact-agent-orb.tsx` follows the height of the latest reply below its content.
-- `src/components/accent-picker.tsx` presents the Blossom Picker and neutral reset.
-- `src/lib/accent-color.ts` derives appearance tokens and Orb palettes from one seed; `src/lib/accent-preference.ts` owns persistence, appearance synchronization and token updates.
-- `src/components/assistant-markdown.tsx` and `src/typeset.css` render semantic Markdown.
-- `src/components/markdown-code-block.tsx` provides the simple highlighted code surface.
-- `src/lib/text-conversation.ts` owns in-memory turns, accepted context, retry, and cancellation.
-- `src/lib/paced-text.ts` and `src/lib/stream-rhythm.ts` control incremental presentation.
-- `src/lib/conversation-spacer.ts` owns send alignment and irreversible spacer consumption.
-- `src/lib/conversation-scroll-motion.ts` animates only explicit send/jump commands.
-- `src/hooks/use-composer-shortcuts.ts` routes page-level text editing to the composer.
-- `src/lib/interface-sounds.ts` and `src/lib/agent-typing.ts` own sound preferences and event-bound typing selection.
-- `server/vite-plugin.ts` selects shared cognition and local voice/dictation providers, mounts local routes and owns the upstream listener.
-- `src/components/ui/` contains the adapted source components.
+- `apps/web/src/App.tsx` composes the interface.
+- `apps/web/src/components/dot-orb.tsx` visualizes model audio.
+- `apps/web/src/components/call-button.tsx` presents call actions.
+- `apps/web/src/components/microphone-waveform.tsx` presents the fixed microphone waveform.
+- `apps/web/src/hooks/use-live-session.ts` connects React to the session lifecycle.
+- `apps/web/src/lib/voice-session.ts` selects the server-configured engine and maintains the shared call lifecycle.
+- `apps/web/src/lib/elevenlabs-conversation.ts` adapts the official ElevenLabs conversation SDK.
+- `apps/web/src/lib/live-session.ts` owns OpenAI WebRTC, events, cancellation, and cleanup.
+- `apps/web/src/lib/audio-meter.ts` analyses input and output streams separately.
+- `apps/web/src/lib/webrtc.ts` waits for ICE gathering.
+- `apps/server/src/session-config.ts` holds OpenAI voice configuration.
+- `apps/server/src/conversation-config.ts` and `apps/server/src/conversation-provider.ts` define shared cognition.
+- `apps/server/src/speech-engine.ts` authenticates and serves the upstream protocol.
+- `apps/server/src/speech-engine-server.ts` owns the isolated upstream listener and cleanup.
+- `apps/server/src/live-api.ts` validates local requests and calls the OpenAI SDK.
+- `apps/server/src/voice-api.ts` validates Speech Engine configuration and returns admitted conversation tokens.
+- `apps/server/src/transcription-api.ts` validates bounded recordings and requests transcription.
+- `apps/server/src/transcription-provider.ts` adapts OpenAI GPT Transcribe and ElevenLabs Scribe v2 behind the same recording contract.
+- `apps/web/src/lib/audio-capture.ts` owns local recording, frequency bands, cancellation, and cleanup.
+- `apps/web/src/lib/transcription-client.ts` uploads completed recordings and handles safe transcription errors.
+- `apps/web/src/hooks/use-audio-capture.ts` connects React to the capture lifecycle.
+- `apps/web/src/hooks/use-composer-dictation.ts` applies transcripts to drafts and accepted text sends.
+- `apps/server/src/codex-process.ts` manages the isolated Codex stdio process.
+- `apps/server/src/codex-provider.ts` owns ChatGPT authentication and text streaming.
+- `apps/web/src/lib/text-access.ts` owns startup authentication and sign-in state.
+- `apps/web/src/components/text-conversation-view.tsx` presents the unified transcript, composer, and call controls.
+- `apps/web/src/components/compact-agent-orb.tsx` follows the height of the latest reply below its content.
+- `apps/web/src/components/accent-picker.tsx` presents the Blossom Picker and neutral reset.
+- `apps/web/src/lib/accent-color.ts` derives appearance tokens and Orb palettes from one seed; `apps/web/src/lib/accent-preference.ts` owns persistence, appearance synchronization and token updates.
+- `apps/web/src/components/assistant-markdown.tsx` and `apps/web/src/typeset.css` render semantic Markdown.
+- `apps/web/src/components/markdown-code-block.tsx` provides the simple highlighted code surface.
+- `apps/web/src/lib/text-conversation.ts` owns in-memory turns, accepted context, retry, and cancellation.
+- `apps/web/src/lib/paced-text.ts` and `apps/web/src/lib/stream-rhythm.ts` control incremental presentation.
+- `apps/web/src/lib/conversation-spacer.ts` owns send alignment and irreversible spacer consumption.
+- `apps/web/src/lib/conversation-scroll-motion.ts` animates only explicit send/jump commands.
+- `apps/web/src/hooks/use-composer-shortcuts.ts` routes page-level text editing to the composer.
+- `apps/web/src/lib/interface-sounds.ts` and `apps/web/src/lib/agent-typing.ts` own sound preferences and event-bound typing selection.
+- `apps/server/src/index.ts` boots the independent HTTP API and Speech Engine listener.
+- `apps/server/src/config.ts` loads root server settings and validates provider, port and origin selections.
+- `apps/server/src/app.ts` mounts the Hono routes and enforces configured origins.
+- `apps/server/src/runtime.ts` owns shared cognition, voice/dictation handlers and shutdown.
+- `packages/contracts/` supplies browser-safe API paths and protocol types.
+- `apps/web/vite.config.ts` configures the frontend build and API dev/preview proxy.
+- `apps/web/src/components/ui/` contains the adapted source components.
 
 Keep session and audio resource management outside the UI components.
 
@@ -183,10 +188,11 @@ The seed is stored in `localStorage` under `dot:accent-color` as a versioned pre
 ```sh
 pnpm test
 pnpm lint
+pnpm typecheck
 pnpm build
 ```
 
-Tests include authenticated local HTTP/WebSocket wiring for development and preview, successive full-history turns, ingress isolation, binding failure and shutdown. They use Node.js's built-in runner and test doubles for browser audio, WebRTC, ElevenLabs SDK and provider requests. They cover selected voice engines, validated Speech Engine tokens, delayed SDK startup and microphone exclusion, voice resources, deferred dictation uploads, recording bounds and cleanup, transcript draft/send behavior, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls.
+Tests include authenticated local HTTP/WebSocket wiring for development and production, successive full-history turns, ingress isolation, binding failure and shutdown. They use Node.js's built-in runner and test doubles for browser audio, WebRTC, ElevenLabs SDK and provider requests. They cover selected voice engines, validated Speech Engine tokens, delayed SDK startup and microphone exclusion, voice resources, deferred dictation uploads, recording bounds and cleanup, transcript draft/send behavior, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls. Compiled-process tests copy the backend into a temporary root with only server dependencies, boot it from an unrelated working directory, exercise HTTP streaming and raw dictation through Hono, consume one-shot Speech Engine admissions over authenticated WebSockets, and verify cancellation and shutdown release both listeners. Web builds enforce a dependency-graph boundary against server implementation and private provider packages; fixture builds prove forbidden imports fail even when tree-shaken or external.
 
 Accent coverage checks color contrast and sRGB gamut, storage/appearance lifecycle, picker keyboard and sound behavior, neutral reset, and shader uniform updates with WebGL test doubles. It checks palette propagation and stable rendering resources while retaining audio drive and positioning. Native popover dismissal/focus, screen-reader behavior, rendered colors and visual layout have not been manually verified in a browser.
 
@@ -194,14 +200,33 @@ Unit tests do not verify audible browser playback, real microphone recording or 
 
 The test suite uses simulated authentication and inference. If Codex CLI 0.156.1 is installed, it also runs a local HTTP protocol test; otherwise that test is skipped. No test requires a ChatGPT account or an API key. Live login, real model entitlement, popup behavior and visual QA require a separate manual check.
 
-## Build and preview
+## Independent apps, build and preview
 
 ```sh
+# Root commands build dependencies through Turbo; dev starts both apps.
+pnpm dev
 pnpm build
-DOT_TEXT_PROVIDER=api pnpm preview
+pnpm test
+pnpm lint
+pnpm typecheck
+
+# App commands can be run independently after building shared contracts once.
+pnpm --filter @dot/contracts build
+pnpm --filter @dot/server dev
+pnpm --filter @dot/server build
+pnpm --filter @dot/server start
+pnpm --filter @dot/web dev
+pnpm --filter @dot/web build
+pnpm --filter @dot/web preview
 ```
 
-Preview serves the production frontend with the local voice, text and transcription API-key endpoints. For ElevenLabs preview, configure the same dedicated public upstream ingress and engine ID; API cognition also requires an OpenAI key. The generated `dist/` directory alone cannot create voice sessions or serve Speech Engine upstream connections. This project currently supports local use: session creation accepts matching localhost origins. Hosting for other users requires a trusted backend with application authentication and request controls; this repository does not include a production deployment.
+The backend `dev` command uses Node watch mode and development configuration. Its `start` command runs compiled `apps/server/dist/index.js` in production mode without Vite or a running web app. If an existing root `.env.local` explicitly selects Codex, use `DOT_TEXT_PROVIDER=api pnpm --filter @dot/server start`. Provider keys are needed only for their selected operations; health and configuration errors work without them. The web build requires no server credentials or backend execution. Shared contracts must be built before direct app build/dev/start commands; root Turbo commands do this automatically.
+
+To preview a production build, run the backend in one terminal and `pnpm preview` in another. Preview serves the web assets (normally port 4173) and proxies `/api` to `http://127.0.0.1:3000`. Include its exact origin in `DOT_FRONTEND_ORIGINS`; the root example includes both normal dev and preview origins. Set `API_PROXY_TARGET` in `apps/web/.env.local` or the web command environment to change the dev/preview API destination. The proxy retains the browser Origin, so allowed origins describe the frontend, not the backend port.
+
+Browser requests default to relative `/api` paths. Set public `VITE_API_BASE_URL` in the web environment to an absolute HTTP(S) API origin, optionally with a path prefix, for separate origins. This value is compiled into the web bundle; rebuild after changing it. The backend requires the exact frontend origin in `DOT_FRONTEND_ORIGINS` and permits only the needed method and `Content-Type` preflight. Unknown and opaque origins are rejected; no wildcard CORS or forwarded-header trust is used. Missing-Origin GET discovery is limited to same-origin browser requests, except `/api/health`, which also permits readiness checks. Login/cancel additionally require development mode, a configured loopback frontend origin and a loopback client socket.
+
+For a same-origin deployment, a trusted ingress can serve web assets and route `/api` to the HTTP backend. Speech Engine WSS ingress forwards only `/speech-engine/upstream` to the backend's distinct authenticated sidecar port, preserving its authorization header. The frontend `dist/` directory cannot create sessions or serve upstream sockets. Origin checks are not user authentication: exposing paid API operations to other users requires application authentication and request controls. This repository includes no deployment or hosting configuration.
 
 ## Source components
 
@@ -221,7 +246,7 @@ The owned adaptation retains the fixed-position bars and processing pattern, rec
 
 Orbkit's unused gallery exports were removed for Vite Fast Refresh compatibility.
 
-The Blossom Picker is adapted from [Nexvyn UI](https://ui.nexvyn.dev/components/color-picker), supplied by its [color-picker registry](https://ui.nexvyn.dev/r/color-picker.json). The owned source in `src/components/ui/color-picker-standalone.tsx` and `src/components/ui/blossom picker/` retains its petal and arc renderers, adds keyboard/reduced-motion support, and routes cues through Dot's existing sound controller. The application uses an always-expanded opaque picker inside the Radix popover. Orbkit's owned runtime additionally redraws changed targets under reduced motion without creating a new context.
+The Blossom Picker is adapted from [Nexvyn UI](https://ui.nexvyn.dev/components/color-picker), supplied by its [color-picker registry](https://ui.nexvyn.dev/r/color-picker.json). The owned source in `apps/web/src/components/ui/color-picker-standalone.tsx` and `apps/web/src/components/ui/blossom picker/` retains its petal and arc renderers, adds keyboard/reduced-motion support, and routes cues through Dot's existing sound controller. The application uses an always-expanded opaque picker inside the Radix popover. Orbkit's owned runtime additionally redraws changed targets under reduced motion without creating a new context.
 
 Original source licenses are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

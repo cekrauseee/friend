@@ -12,8 +12,10 @@ Use Node.js 22.18+ and pnpm.
 
 ```sh
 pnpm install
-cp .env.example .env.local
+pnpm run setup
 ```
+
+Setup creates `.env.local` or updates it to follow the comments and variable order in `.env.example`. Existing values, including empty values, quotes and multiline values, are preserved. Missing variables receive the example defaults; custom variables and local notes remain at the end. Re-run `pnpm run setup` whenever the example changes. An up-to-date file is left untouched, and logs never show values. The command only synchronizes the local environment file; it does not install dependencies, obtain keys, or configure hosted agents. Use `pnpm run setup`, since `pnpm setup` is pnpm's own installation command.
 
 Voice and dictation default to OpenAI: set `OPENAI_API_KEY` in `.env.local` to an existing project key with access to the required models. To use ElevenLabs dictation, set `DOT_TRANSCRIPTION_PROVIDER=elevenlabs` and `ELEVENLABS_API_KEY` with Scribe v2 access. To use ElevenAgents calls, set `DOT_VOICE_PROVIDER=elevenlabs`, the same server-only `ELEVENLABS_API_KEY`, and `ELEVENLABS_AGENT_ID` as described below. The two selections are independent and their ElevenLabs paths require no OpenAI key. Text chat in development uses your ChatGPT account through Codex CLI 0.156.1 on `PATH`; it does not need an API key. Then run:
 

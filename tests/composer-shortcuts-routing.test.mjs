@@ -18,10 +18,10 @@ function fixture({ enabled = true, voice = false, modal = false } = {}) {
   const runtime = { sounds: [], cleanup: null }
   globalThis.__composerRouting = runtime
   class FakeElement {
-    constructor(editable = false) { this.editable = editable }
+    constructor(editable = false, appearance = false) { this.editable = editable; this.appearance = appearance }
     closest(selector) {
       if (selector === '[data-calling="true"]') return voice ? this : null
-      if (selector.startsWith('input, textarea')) return this.editable ? this : null
+      if (selector.startsWith('input, textarea')) return this.editable || this.appearance && selector.includes('[data-appearance-control]') ? this : null
       return null
     }
   }
@@ -46,8 +46,8 @@ function fixture({ enabled = true, voice = false, modal = false } = {}) {
   return {
     input, runtime, dispatchKey, FakeElement,
     get opened() { return opened }, get focused() { return focused },
-    paste(text) {
-      const event = { target: new FakeElement(), clipboardData: { getData: () => text }, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
+    paste(text, target = new FakeElement()) {
+      const event = { target, clipboardData: { getData: () => text }, defaultPrevented: false, preventDefault() { this.defaultPrevented = true } }
       listeners.get('paste')?.(event)
       return event
     },
@@ -107,4 +107,21 @@ test('existing edit fields and active dialogs retain their own keyboard input', 
   } finally { f.restore() }
   const modal = fixture({ modal: true })
   try { modal.dispatchKey('a'); assert.equal(modal.focused, 0) } finally { modal.restore() }
+})
+
+
+test('appearance controls retain keys and paste without opening or editing the composer', () => {
+  const f = fixture()
+  try {
+    for (const key of ['a', 'Backspace', ' ', 'ArrowUp', 'Escape']) {
+      const event = f.dispatchKey(key, { target: new f.FakeElement(false, true), ctrlKey: key === 'a' })
+      assert.equal(event.defaultPrevented, false)
+    }
+    const paste = f.paste('ignored', new f.FakeElement(false, true))
+    assert.equal(paste.defaultPrevented, false)
+    assert.equal(f.focused, 0)
+    assert.equal(f.opened, 0)
+    assert.equal(f.input.value, 'hello world')
+    assert.equal(f.runtime.sounds.length, 0)
+  } finally { f.restore() }
 })

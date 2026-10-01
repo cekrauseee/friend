@@ -1,0 +1,81 @@
+// Adapted from Nexvyn Blossom Picker: https://ui.nexvyn.dev/r/color-picker.json
+// Copyright (c) 2026 Nexvyn UI. MIT with Commons Clause; see THIRD_PARTY_NOTICES.md.
+import { BLOOM_EASING } from '../constants'
+import { createSVGElement, setStyles } from '../dom-helpers'
+import { hslaToString } from '../utils'
+
+export class ColorBarRenderer {
+  private animationDuration: number
+
+  public el: SVGSVGElement
+  private bgCircle: SVGCircleElement
+  private colorCircle: SVGCircleElement
+
+  constructor(
+    radius: number,
+    barWidth: number,
+    animationDuration: number,
+  ) {
+    this.animationDuration = animationDuration
+
+    const size = (radius + barWidth / 2) * 2 + 4
+    this.el = createSVGElement('svg', {
+      width: String(size),
+      height: String(size),
+    })
+    this.el.classList.add('bcp-svg')
+    setStyles(this.el, {
+      left: '50%',
+      top: '50%',
+      marginLeft: `${-size / 2}px`,
+      marginTop: `${-size / 2}px`,
+      zIndex: '5',
+    })
+
+    const cx = String(size / 2)
+    const cy = String(size / 2)
+    const r = String(radius)
+    const sw = String(barWidth)
+
+    this.bgCircle = createSVGElement('circle', {
+      cx,
+      cy,
+      r,
+      fill: 'none',
+      'stroke-width': sw,
+    })
+
+    this.colorCircle = createSVGElement('circle', {
+      cx,
+      cy,
+      r,
+      fill: 'none',
+      'stroke-width': sw,
+    })
+
+    this.bgCircle.style.stroke = 'var(--color-border)'
+    this.el.appendChild(this.bgCircle)
+    this.el.appendChild(this.colorCircle)
+  }
+
+  update(
+    hue: number,
+    saturation: number,
+    lightness: number,
+    _alpha: number,
+    isExpanded: boolean,
+  ): void {
+    const color = hslaToString(hue, saturation, lightness, 100)
+    this.colorCircle.setAttribute('stroke', color)
+
+    setStyles(this.el, {
+      opacity: isExpanded ? '1' : '0',
+      transform: isExpanded ? 'scale(1)' : 'scale(0.8)',
+      transition: `opacity ${this.animationDuration}ms ${BLOOM_EASING}, transform ${this.animationDuration}ms ${BLOOM_EASING}`,
+    })
+  }
+
+  destroy(): void {
+    this.el.remove()
+  }
+}

@@ -28,11 +28,18 @@ html::-webkit-scrollbar {
   overflow: hidden;
 }
 
-.sound-toggle {
+.appearance-controls {
   position: fixed;
   inset-block-start: max(0.5rem, env(safe-area-inset-top));
   inset-inline-end: max(0.5rem, env(safe-area-inset-right));
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 1);
+}
+
+.sound-toggle,
+.accent-trigger {
   color: var(--muted-foreground);
 }
 
@@ -586,4 +593,63 @@ html::-webkit-scrollbar {
 
 .conversation-dictation-error .call-error {
   flex: 1;
+}
+
+
+.accent-swatch {
+  inline-size: 1rem;
+  block-size: 1rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--foreground) 15%, transparent);
+  transition: background-color 150ms ease-out;
+}
+
+.accent-popover {
+  inline-size: 18rem;
+  max-inline-size: calc(100vw - 2rem);
+  max-block-size: var(--radix-popover-content-available-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  --color-bg: var(--popover);
+  --color-border: var(--border);
+  --color-accent: var(--ring);
+}
+
+.accent-picker-content { display: flex; flex-direction: column; gap: 1rem; }
+.accent-picker-heading { display: flex; flex-direction: column; gap: 0.25rem; }
+.accent-picker-heading h2 { font-size: 0.875rem; font-weight: 500; }
+.accent-picker-heading p { font-size: 0.75rem; line-height: 1.5; color: var(--muted-foreground); }
+.accent-picker-stage { display: grid; place-items: center; min-block-size: 16rem; }
+.accent-picker-footer { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.accent-picker-preview { font-size: 0.75rem; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+
+@media (prefers-reduced-motion: reduce) {
+  .accent-swatch { transition-duration: 0ms; }
+}
+
+.accent-trigger:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.accent-picker-stage .bcp-core:disabled { opacity: 1; cursor: default; }
+@media (forced-colors: active) {
+  .accent-trigger:focus-visible { outline-color: Highlight; }
+}
+
+
+/* Radix keeps the content mounted until its own exit animation ends. */
+.accent-popover[data-state="closed"] {
+  pointer-events: none;
+  animation: accent-popover-exit 140ms ease-out;
+}
+
+@keyframes accent-popover-exit {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(4px) scale(0.98); }
+}
+
+@keyframes accent-popover-fade-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accent-popover[data-state="closed"] { animation-name: accent-popover-fade-exit; }
 }

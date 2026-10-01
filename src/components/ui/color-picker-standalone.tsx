@@ -1,0 +1,184 @@
+// Adapted from Nexvyn Blossom Picker: https://ui.nexvyn.dev/r/color-picker.json
+// Copyright (c) 2026 Nexvyn UI. MIT with Commons Clause; see THIRD_PARTY_NOTICES.md.
+'use client'
+
+import { forwardRef, useEffect, useLayoutEffect, useRef, type HTMLAttributes, type Ref } from 'react'
+import { useReducedMotion } from 'motion/react'
+
+import { cn } from 'cn'
+import {
+  BlossomColorPicker as LocalBlossomColorPicker,
+  type BlossomColorPickerOptions,
+} from './blossom picker/BlossomColorPicker'
+import { blossomPickerStyles } from './blossom picker/styles'
+import type {
+  BlossomColorPickerColor,
+  BlossomColorPickerValue,
+  ColorInput,
+  SliderPosition,
+} from './blossom picker/types'
+
+export type BlossomPickerVariant = 'blossom' | 'blossom-arc'
+
+export type BlossomPickerValue = BlossomColorPickerValue
+export type BlossomPickerColor = BlossomColorPickerColor
+export type { ColorInput, SliderPosition }
+
+export interface BlossomPickerProps
+  extends
+    Omit<HTMLAttributes<HTMLDivElement>, 'onChange' | 'defaultValue' | 'value'>,
+    BlossomColorPickerOptions {
+  variant?: BlossomPickerVariant
+}
+
+export type { BlossomColorPickerValue, BlossomColorPickerColor, BlossomColorPickerOptions }
+export type ColorPickerProps = BlossomPickerProps
+
+function propsToOptions(props: BlossomPickerProps): Partial<BlossomColorPickerOptions> {
+  const options: Partial<BlossomColorPickerOptions> = {}
+
+  if (props.value !== undefined) options.value = props.value
+  if (props.defaultValue !== undefined) options.defaultValue = props.defaultValue
+  if (props.colors !== undefined) options.colors = props.colors
+  if (props.onChange !== undefined) options.onChange = props.onChange
+  if (props.onCollapse !== undefined) options.onCollapse = props.onCollapse
+  if (props.disabled !== undefined) options.disabled = props.disabled
+  if (props.openOnHover !== undefined) options.openOnHover = props.openOnHover
+  if (props.initialExpanded !== undefined) {
+    options.initialExpanded = props.initialExpanded
+  }
+  if (props.animationDuration !== undefined) {
+    options.animationDuration = props.animationDuration
+  }
+  if (props.showAlphaSlider !== undefined) {
+    options.showAlphaSlider = props.showAlphaSlider
+  }
+  if (props.coreSize !== undefined) options.coreSize = props.coreSize
+  if (props.petalSize !== undefined) options.petalSize = props.petalSize
+  if (props.showCoreColor !== undefined) {
+    options.showCoreColor = props.showCoreColor
+  }
+  if (props.sliderPosition !== undefined) {
+    options.sliderPosition = props.sliderPosition
+  }
+  if (props.adaptivePositioning !== undefined) {
+    options.adaptivePositioning = props.adaptivePositioning
+  }
+  if (props.circularBarWidth !== undefined) {
+    options.circularBarWidth = props.circularBarWidth
+  }
+  if (props.sliderWidth !== undefined) options.sliderWidth = props.sliderWidth
+  if (props.sliderOffset !== undefined) options.sliderOffset = props.sliderOffset
+  if (props.collapsible !== undefined) options.collapsible = props.collapsible
+
+  return options
+}
+
+function syncRef(ref: Ref<HTMLDivElement> | undefined, node: HTMLDivElement | null) {
+  if (!ref) return
+  if (typeof ref === 'function') {
+    ref(node)
+  } else {
+    ref.current = node
+  }
+}
+
+export const BlossomPicker = forwardRef<HTMLDivElement, BlossomPickerProps>(
+  ({ className, variant = 'blossom-arc', ...props }, ref) => {
+    const blossomProps = {
+      ...props,
+      showAlphaSlider: variant === 'blossom' ? false : (props.showAlphaSlider ?? true),
+    }
+
+    return <BlossomPickerInner ref={ref} className={className} {...blossomProps} />
+  },
+)
+
+BlossomPicker.displayName = 'BlossomPicker'
+
+const BlossomPickerInner = forwardRef<HTMLDivElement, Omit<BlossomPickerProps, 'variant'>>(
+  ({ className, ...props }, ref) => {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const pickerRef = useRef<LocalBlossomColorPicker | null>(null)
+    const reduceMotion = useReducedMotion() || (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+
+    useEffect(() => {
+      if (!containerRef.current) return
+      pickerRef.current = new LocalBlossomColorPicker(containerRef.current, { ...propsToOptions(props), animationDuration: reduceMotion ? 0 : props.animationDuration })
+      return () => {
+        pickerRef.current?.destroy()
+        pickerRef.current = null
+      }
+      // mount-only: the picker instance is created once and updated via setOptions below
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+
+    useLayoutEffect(() => {
+      const options = propsToOptions(props)
+      if (reduceMotion && options.animationDuration !== 0) {
+        options.animationDuration = 0
+      }
+      pickerRef.current?.setOptions(options)
+      // props is read via propsToOptions; individual fields below drive updates
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+      props.value,
+      props.defaultValue,
+      props.colors,
+      props.onChange,
+      props.onCollapse,
+      props.disabled,
+      props.openOnHover,
+      props.initialExpanded,
+      props.animationDuration,
+      props.showAlphaSlider,
+      props.coreSize,
+      props.petalSize,
+      props.showCoreColor,
+      props.sliderPosition,
+      props.adaptivePositioning,
+      props.circularBarWidth,
+      props.sliderWidth,
+      props.sliderOffset,
+      props.collapsible,
+      reduceMotion,
+    ])
+
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: blossomPickerStyles }} />
+        <div
+          ref={(node) => {
+            containerRef.current = node
+            syncRef(ref, node)
+          }}
+          data-disabled={props.disabled || undefined}
+          data-state={props.initialExpanded || props.collapsible === false ? 'expanded' : 'collapsed'}
+          className={cn(className)}
+        />
+      </>
+    )
+  },
+)
+
+BlossomPickerInner.displayName = 'BlossomPickerInner'
+
+export function BlossomPickerPreview() {
+  return (
+    <BlossomPicker
+      variant="blossom-arc"
+      initialExpanded
+      coreSize={48}
+      petalSize={48}
+      circularBarWidth={14}
+      sliderWidth={14}
+      sliderOffset={38}
+    />
+  )
+}
+
+export const ColorPicker = BlossomPicker
+export const BlossomColorPicker = BlossomPicker
+
+
+export default BlossomPicker

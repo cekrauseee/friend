@@ -57,7 +57,7 @@ interface AssistantMarkdownProps {
 
 export function AssistantMarkdown({ text, streaming, deltas = emptyDeltas }: AssistantMarkdownProps) {
   return (
-    <div className="typeset typeset-docs max-w-[33em] conversation-markdown" dir="auto">
+    <div data-selectable-message className="typeset typeset-docs max-w-[33em] conversation-markdown" dir="auto">
       <MarkdownContext.Provider value={{ text, streaming, deltas }}>
         <Markdown
           remarkPlugins={[remarkGfm, remarkMath, [remarkDeltaText, { source: text, deltas }]]}

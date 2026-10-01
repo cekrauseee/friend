@@ -1,0 +1,57 @@
+// Adapted from Nexvyn Blossom Picker: https://ui.nexvyn.dev/r/color-picker.json
+// Copyright (c) 2026 Nexvyn UI. MIT with Commons Clause; see THIRD_PARTY_NOTICES.md.
+import { createElement, setStyles } from '../dom-helpers'
+
+export class CoreButtonRenderer {
+  private animationDuration: number
+
+  private onClick: () => void
+
+  public el: HTMLButtonElement
+
+  constructor(
+    coreSize: number,
+    animationDuration: number,
+    onClick: () => void,
+  ) {
+    this.animationDuration = animationDuration
+    this.onClick = onClick
+
+    this.el = createElement('button', undefined, {
+      type: 'button',
+      tabIndex: '0',
+    })
+    this.el.className = 'bcp-core'
+    this.el.addEventListener('click', () => {
+      this.onClick()
+    })
+
+    setStyles(this.el, {
+      width: `${coreSize}px`,
+      height: `${coreSize}px`,
+      zIndex: '1000',
+    })
+  }
+
+  update(coreColor: string, isExpanded: boolean, isHovering: boolean, disabled: boolean): void {
+    this.el.disabled = disabled
+    this.el.setAttribute('aria-label', `Color picker${isExpanded ? ', expanded' : ''}`)
+    this.el.setAttribute('aria-expanded', String(isExpanded))
+    this.el.tabIndex = disabled ? -1 : 0
+
+    setStyles(this.el, {
+      backgroundColor: coreColor,
+      transform: isExpanded ? 'scale(1)' : isHovering ? 'scale(1.08)' : 'scale(1)',
+      boxShadow: isExpanded
+        ? '0 0 0 2px var(--color-border), var(--shadow-lg)'
+        : isHovering
+          ? 'var(--shadow-xl)'
+          : 'var(--shadow-md)',
+      transition: `transform ${this.animationDuration}ms var(--motion-ease-out), box-shadow ${this.animationDuration}ms ease`,
+    })
+  }
+
+  destroy(): void {
+    this.el.remove()
+  }
+}

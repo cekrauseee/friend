@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createLiveApi } from './live-api.ts'
 
-export type VoiceProvider = 'openai' | 'elevenlabs'
+import type { VoiceProvider, VoiceProviderResponse, ElevenLabsSessionResponse, ServiceFailure } from '@dot/contracts'
+export type { VoiceProvider } from '@dot/contracts'
 export const ELEVENLABS_VOICE_MODEL = 'eleven_v4_turbo'
 const MAX_UPSTREAM_BYTES = 1024 * 1024
 
@@ -11,7 +12,7 @@ export function voiceProvider(value: string | undefined): VoiceProvider {
   throw new Error('DOT_VOICE_PROVIDER must be openai or elevenlabs.')
 }
 
-function reply(response: ServerResponse, status: number, body: unknown) {
+function reply(response: ServerResponse, status: number, body: VoiceProviderResponse | ElevenLabsSessionResponse | ServiceFailure) {
   if (response.destroyed) return
   response.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
   response.end(JSON.stringify(body))

@@ -1,3 +1,4 @@
+import type { TextAccessState, TextAccessStatus, TextAccessLoginResponse, TextAccessCancelResponse } from '@dot/contracts'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { ChatError, isLocalOrigin, replyError, type ChatEvent, type ChatMessage } from './chat-api.ts'
 import { conversationConfig, conversationInstructions } from './conversation-config.ts'
@@ -7,7 +8,7 @@ const unavailable = () => new ChatError(503, 'not_configured', 'Could not connec
 const accessError = () => new ChatError(401, 'access_denied', 'Sign in with ChatGPT from the main screen to use text chat.')
 const replyFailure = () => new ChatError(502, 'upstream_error', 'Codex could not complete the reply. Check your ChatGPT model access and usage limits, then try again.')
 const loginError = 'ChatGPT sign-in did not complete. Select text chat to try again.'
-type Login = { id: string; state: 'pending' | 'succeeded' | 'failed'; message?: string }
+type Login = TextAccessState
 function object(value: unknown): Record<string, unknown> { return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {} }
 
 export function validAuthUrl(value: unknown): value is string {
@@ -53,7 +54,7 @@ export function createCodexProvider(rpc: CodexRpc = createCodexProcess(), option
     finishLogin('failed')
     if (current?.state === 'pending') await rpc.request('account/login/cancel', { loginId: current.id }).catch(() => {})
   }
-  const status = async () => ({ provider: 'codex', authenticated: await account(), login: login ?? null })
+  const status = async (): Promise<TextAccessStatus> => ({ provider: 'codex', authenticated: await account(), login: login ?? null })
   const startLogin = async () => {
     if (startingLogin || login?.state === 'pending') throw new ChatError(409, 'invalid_request', 'ChatGPT sign-in is already open. Finish or cancel it before trying again.')
     startingLogin = true
@@ -148,7 +149,7 @@ export function createTextAccessApi(codex?: ReturnType<typeof createCodexProvide
     if (request.method !== 'POST') return replyError(response, new ChatError(405, 'method_not_allowed', 'Use POST to check text chat access.'))
     if (!isLocalOrigin(request)) return replyError(response, new ChatError(403, 'forbidden_origin', 'Requests must come from this local app.'))
     try {
-      let body: unknown
+      let body: TextAccessStatus | TextAccessLoginResponse | TextAccessCancelResponse
       if (request.url === '/status') body = codex ? await codex.status() : { provider: 'api', authenticated: true, login: null }
       else if (request.url === '/login' && codex) body = await codex.startLogin()
       else if (request.url === '/cancel' && codex) { await codex.cancelLogin(); body = { canceled: true } }

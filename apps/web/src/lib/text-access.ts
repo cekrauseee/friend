@@ -1,6 +1,7 @@
+import type { TextAccessStatus } from '@dot/contracts'
 export type AccessSnapshot = { pending: boolean; message: string | null; checking: boolean; authenticated: boolean | null }
 type LoginWindow = { closed: boolean; location: { href: string }; close(): void; opener: unknown }
-type AccessStatus = { provider: 'codex' | 'api'; authenticated: boolean; login: { id: string; state: string; message?: string } | null }
+type AccessStatus = TextAccessStatus
 const failed = 'Could not open text chat. Check the local server and try again.'
 const canceled = 'ChatGPT sign-in was canceled. Try signing in again.'
 

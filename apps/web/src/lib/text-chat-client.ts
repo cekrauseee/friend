@@ -1,7 +1,5 @@
-export interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
+import type { ChatMessage } from '@dot/contracts'
+export type { ChatMessage } from '@dot/contracts'
 
 export type TextChatTransport = (
   messages: ChatMessage[],

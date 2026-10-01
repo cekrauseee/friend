@@ -6,11 +6,8 @@ import { isLocalOrigin } from './chat-api.ts'
 const MAX_AUDIO_BYTES = 25_000_000
 const REQUEST_TIMEOUT_MS = 120_000
 
-type TranscriptionCode = 'invalid_request' | 'request_too_large' | 'unsupported_media_type'
-  | 'method_not_allowed' | 'forbidden_origin' | 'not_configured' | 'rate_limited'
-  | 'access_denied' | 'upstream_error' | 'empty_transcript' | 'timeout'
-export type TranscriptionResponse = { text: string }
-export type TranscriptionFailure = { error: { code: TranscriptionCode; message: string } }
+import type { TranscriptionCode, TranscriptionResponse, TranscriptionFailure } from '@dot/contracts'
+export type { TranscriptionCode, TranscriptionResponse, TranscriptionFailure } from '@dot/contracts'
 
 class TranscriptionError extends Error {
   readonly status: number

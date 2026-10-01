@@ -1,12 +1,8 @@
 import OpenAI from 'openai'
 import { conversationConfig } from './conversation-config.ts'
 
-type ChatCode = 'invalid_request' | 'request_too_large' | 'unsupported_media_type'
-  | 'method_not_allowed' | 'forbidden_origin' | 'not_configured'
-  | 'rate_limited' | 'access_denied' | 'upstream_error' | 'incomplete_response'
-export type ChatMessage = { role: 'user' | 'assistant'; content: string }
-export type ChatEvent = { type: 'delta'; text: string } | { type: 'done' }
-  | { type: 'error'; code: ChatCode; message: string }
+import type { ChatCode, ChatMessage, ChatEvent } from '@dot/contracts'
+export type { ChatCode, ChatMessage, ChatEvent } from '@dot/contracts'
 
 export class ChatError extends Error {
   readonly status: number

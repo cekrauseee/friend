@@ -1,16 +1,16 @@
 ---
-slug: friend
+slug: dot
 portfolioIndex: 8
-name: cekrauseee/friend
+name: Dot
 repositoryUrl: https://github.com/cekrauseee/friend
 description: >-
-  A minimal voice companion with separate visual feedback for listening and
-  speaking.
+  A minimal voice and text companion with paced replies, restrained motion,
+  and separate visual feedback for listening and speaking.
 metaDescription: >-
-  Friend explores voice conversation with GPT-Live-1, WebRTC, a reactive pixel
+  Dot explores voice conversation with GPT-Live-1, WebRTC, a reactive pixel
   orb, and a small server-side boundary for session creation.
 summary: >-
-  Friend starts with a small interaction: begin a call, speak naturally, and
+  Dot starts with a small interaction: begin a call, speak naturally, and
   hear the model respond. A pixel orb follows the model's audio, while fixed
   waveform bars show microphone activity. The local prototype keeps session
   management separate from its React components and keeps API credentials on
@@ -24,16 +24,57 @@ highlights:
 
 ## A voice companion with a small interface
 
-Friend is a browser-based voice experiment centered on a pixel orb and a single
+Dot is a browser-based voice experiment centered on a pixel orb and a single
 call control. Starting a call reveals a fixed waveform for the microphone. The
-orb responds to the model's audio, keeping the two sides of the conversation
-visually distinct without introducing a transcript or a chat layout.
+orb responds to the model's audio, keeping the two sides of voice conversation
+visually distinct. Text conversation shares the same screen, with a persistent
+composer, user bubbles, and assistant Markdown.
 
 The interface uses neutral colors and solid controls. The call button turns red
-when it ends or cancels a session. Normal operation has no visible copy;
-accessible labels and contextual errors explain actions and failures when needed.
+when it ends or cancels a session. Text replies use semantic typography and simple code containers; accessible
+labels and contextual errors explain controls and failures.
 The orb adapts the Orbkit SHDR-14 shader, and the waveform uses the base renderer
 from ElevenLabs UI with centered bars and a gradual release into silence.
+
+## Text that follows the reader's pace
+
+Text requests stream through a local endpoint using GPT-6 Luna with no reasoning
+or application tools. Development can use Codex-managed ChatGPT sign-in; the API
+provider is selected explicitly for API-key use and preview. A startup spinner
+and sign-in dialog keep authentication separate from the conversation controls.
+
+Received text enters a presentation buffer. A non-cyclic clock varies update
+intervals, increases chunk size when the queue grows, and bounds the remaining
+delay after transport completion. The displayed text retains its original
+Markdown and Unicode content. The agent orb stays below the latest reply and
+moves smoothly when its height changes.
+
+A send spacer lifts the user's new message to the top even before the transcript
+fills the screen. Reply growth and reader scrolling consume that space without
+restoring it. Streaming does not scroll the viewport; returning to the latest
+content is an explicit action. Page-level typing and editing shortcuts open the
+composer outside active voice calls, editable controls, and modal dialogs.
+
+Quiet Zen sound cues accompany meaningful interactions. Agent typing selects
+some visible updates with small variations in timing, gain, and playback rate.
+The preference is persistent and can be muted; no audio or conversation history
+is saved by the application.
+
+## Dictating a text message
+
+The microphone control records locally and reuses the fixed waveform for input
+feedback. Stop transcribes with the selected provider and appends the result to the
+existing draft; Check submits the same merged text through the text conversation.
+Cancel discards the recording and preserves the draft. Calls and dictation are
+mutually exclusive, and the call control disappears once text messages exist.
+
+Only Stop or Check uploads audio. Recordings are bounded to five minutes and
+25,000,000 bytes, and resources close on completion, cancellation and failure.
+Transcription independently selects OpenAI GPT Transcribe or ElevenLabs Scribe v2
+through server-only configuration and credentials. OpenAI remains the default;
+ElevenLabs detects language automatically with audio-event tagging and speaker
+diarization disabled. There is no automatic fallback, and Codex sign-in is
+separate. Errors leave the draft intact and remain available for dismissal or retry.
 
 ## Keeping signaling separate from audio
 
@@ -68,12 +109,18 @@ than leaving a silent call connected.
 
 ## A local prototype with explicit limits
 
-Friend currently has no accounts, tools, saved conversations, or application
-recordings. It does not request OpenAI session storage. The signaling endpoint
-accepts matching localhost origins; publishing a service for other users would
+Dot has no application user database, saved conversations, or recordings.
+Local text development uses the user's Codex-managed ChatGPT account. Interface
+sound preferences are stored locally; transcripts remain in browser memory. It does not request OpenAI session storage. The signaling and transcription endpoints
+accept matching localhost origins; publishing a service for other users would
 require authentication and request controls around the paid API.
 
 Focused unit tests cover the session contract, input/output separation,
-cancellation, playback failure, cleanup, and waveform behavior. Local Chrome
+cancellation, playback failure, cleanup, waveform behavior, deferred dictation
+uploads, recording limits, transcript insertion and sending, authentication,
+paced text, spacer consumption, keyboard editing, and sound selection. Local Chrome
 verification confirmed playback with synthetic audio. A complete conversation
-against OpenAI remains a separate live validation step.
+against OpenAI and real microphone dictation remain separate live validation steps.
+Scribe v2 account access and transcription quality have not been verified with live
+requests. Uploaded recordings follow the selected provider’s data policy, retention
+settings and billing even though Dot keeps no local recording history.

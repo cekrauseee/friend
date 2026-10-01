@@ -1,2 +1,6 @@
 minimumReleaseAgeExclude:
   - openai@7.25.0
+  - '@streamdown/code@2.0.0'
+  - '@streamdown/mermaid@1.0.3'
+  - remend@1.4.0
+  - streamdown@2.7.0

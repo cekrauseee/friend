@@ -57,6 +57,7 @@ const appModule = await load('src/App.tsx', {
   '@/components/global-loading': component('GlobalLoading'),
   '@/components/authentication-dialog': component('AuthenticationDialog'),
   '@/components/sound-toggle': component('SoundToggle'),
+  '@/components/accent-picker': component('AccentPicker'),
   '@/lib/interface-sounds': sounds,
   '@/lib/conversation-sound': dataModule('export const conversationOutcomeSound = () => null;'),
 })

@@ -86,9 +86,9 @@ function TurnView({ turn, latest, active, canRetry, onRetry }: TurnViewProps) {
         transition={reducedMotion ? surfaceFade : surfaceSpring}
         style={{ transformOrigin: 'right bottom' }}
       >
-        <Bubble align="end" variant="secondary">
+        <Bubble align="end" variant="user">
           <BubbleContent asChild>
-            <p className="whitespace-pre-wrap [overflow-wrap:anywhere]" dir="auto">{turn.userText}</p>
+            <p data-selectable-message className="whitespace-pre-wrap [overflow-wrap:anywhere]" dir="auto">{turn.userText}</p>
           </BubbleContent>
         </Bubble>
       </motion.div>

@@ -18,7 +18,7 @@ export function useComposerShortcuts({ enabled, open, inputRef, onOpen, onDraftC
       const element = target instanceof Element ? target : null
       return Boolean(document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]')
         || inputRef.current?.closest('[data-calling="true"]')
-        || element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="menu"], [role="listbox"]'))
+        || element?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="menu"], [role="listbox"], [data-appearance-control]'))
     }
     const focus = () => {
       if (!open) flushSync(onOpen)

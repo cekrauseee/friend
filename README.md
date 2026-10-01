@@ -41,7 +41,7 @@ On send, a bottom spacer creates just enough scroll reach to align the new user 
 
 Incoming deltas are buffered for display with a seeded, non-cyclic rhythm. The visual clock keeps its phase across short gaps and adds brief, single-use pauses at prose boundaries; code does not receive prose pauses. Chunk sizes increase with backlog and content age. The presentation targets 200ms of lag, releases content aged 350ms at the next scheduled deadline, and drains the remaining queue within 250ms of transport completion while the scheduler is running. Text, Markdown whitespace, and Unicode graphemes are preserved. The turn remains active until displayed text drains, so completion feedback and future conversation context agree with the visible response. Canceling discards pending display work; retry starts a fresh attempt.
 
-UI SFX uses the Zen pack with a quiet master gain. Typing, sending, completion, retry, errors, sign-in, and call-ending feedback use short semantic cues; hover and scrolling stay silent. Agent typing selects sounds only on newly displayed content, with variable eligibility, occasional omissions, and small gain/rate changes. Recovery and final draining reduce its gain. Interface effects are suspended during voice calls and hidden-page updates. The accessible sound toggle persists its preference in localStorage; transcript and audio are not persisted. Existing mute preferences from the previous project name are preserved.
+UI SFX uses the Zen pack with a quiet master gain. Typing, sending, completion, retry, errors, sign-in, and call-ending feedback use short semantic cues; scrolling and other hover stay silent. Entering a palette color plays a quieter typing cue with a short cooldown. Agent typing selects sounds only on newly displayed content, with variable eligibility, occasional omissions, and small gain/rate changes. Recovery and final draining reduce its gain. Interface effects are suspended during voice calls and hidden-page updates. The accessible sound toggle persists its preference in localStorage; transcript and audio are not persisted. Existing mute preferences from the previous project name are preserved.
 
 Use `DOT_TEXT_PROVIDER=codex` (the development default) or `DOT_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. OpenAI voice and OpenAI dictation use that key; ElevenLabs voice and dictation use their independent provider selections with the server-only ElevenLabs key. Dictation does not use Codex or ChatGPT authentication. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `DOT_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
 
@@ -139,6 +139,8 @@ Dot does not persist audio or transcripts and does not request OpenAI session st
 - `src/lib/text-access.ts` owns startup authentication and sign-in state.
 - `src/components/text-conversation-view.tsx` presents the unified transcript, composer, and call controls.
 - `src/components/compact-agent-orb.tsx` follows the height of the latest reply below its content.
+- `src/components/accent-picker.tsx` presents the Blossom Picker and neutral reset.
+- `src/lib/accent-color.ts` derives appearance tokens and Orb palettes from one seed; `src/lib/accent-preference.ts` owns persistence, appearance synchronization and token updates.
 - `src/components/assistant-markdown.tsx` and `src/typeset.css` render semantic Markdown.
 - `src/components/markdown-code-block.tsx` provides the simple highlighted code surface.
 - `src/lib/text-conversation.ts` owns in-memory turns, accepted context, retry, and cancellation.
@@ -160,6 +162,12 @@ Application-specific geometry stays in the conversation components and CSS. Comp
 
 Typography is defined by the owned shadcn Typeset stylesheet and the chat preset. Rich text keeps native heading, paragraph, list, quote, rule, and table semantics. Code blocks are selectable, keyboard-scrollable containers without file actions. Sound reinforces the existing visible states and can be muted independently of motion preferences.
 
+The accent swatch immediately left of the sound toggle opens the Blossom Picker below it. Select a petal to choose a color and use the arc to adjust its shade. Petals support arrow keys, Home and End; the arc also supports Page Up, Page Down and Shift with arrows. Escape or an outside click closes the popover with a brief exit and returns focus to its trigger. The closing picker stops accepting input; reduced motion uses a fade. Transparency is not exposed. Message text, including Markdown, code and tables, remains selectable; other interface text does not. Editable fields keep native text selection. Selection has a dedicated accent tone and opaque black/white foreground with at least 7:1 contrast. User-message Bubbles have their own fill: darker with white text in dark appearance, lighter with black text in light appearance, also at least 7:1. The selection tone retains at least 3:1 contrast against the Bubble fill. These roles are independent of primary-action colors.
+
+The selected opaque hex is a seed preference. Primary actions, user-message Bubbles and focus indicators use contrast- and gamut-adjusted variants for the current system light/dark appearance; both Orbs use a related deep ink and lighter paper pair, including their thinking, speaking and idle variations. Assistant prose, surrounding neutral surfaces and semantic error colors keep their existing roles. Appearance changes always derive from the original seed. Shader colors spring to their new targets without replacing the WebGL context; reduced motion redraws a static frame in place.
+
+The seed is stored in `localStorage` under `dot:accent-color` as a versioned preference and synchronized across tabs. Invalid or obsolete values fall back to neutral; unavailable storage permits changes for the current page. **Restore neutral** removes the preference and restores the original neutral Bubble fill, interface tokens and exact large/compact Orb color targets; Bubble text remains black or white. Opening the picker never selects or saves a default color. Picker selection, shade, open, reset and color-entry hover sounds share the existing Interface sounds preference, hidden-page and call suppression. Color-entry hover uses a quieter typing cue with a 90ms cooldown; pointer movement within a color stays silent.
+
 ## Checks
 
 ```sh
@@ -169,6 +177,8 @@ pnpm build
 ```
 
 Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, ElevenAgents SDK and provider requests. They cover selected voice engines, validated/version-pinned tokens, delayed SDK startup and microphone exclusion, voice resources, deferred dictation uploads, recording bounds and cleanup, transcript draft/send behavior, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls.
+
+Accent coverage checks color contrast and sRGB gamut, storage/appearance lifecycle, picker keyboard and sound behavior, neutral reset, and shader uniform updates with WebGL test doubles. It checks palette propagation and stable rendering resources while retaining audio drive and positioning. Native popover dismissal/focus, screen-reader behavior, rendered colors and visual layout have not been manually verified in a browser.
 
 Unit tests do not verify audible browser playback, real microphone recording or live transcription. Real voice conversations and dictation requests are separate manual checks with their selected provider configuration. ElevenAgents account/model entitlement, microphone permissions, autoplay, audible playback and audio quality remain unverified by automated checks. Scribe v2 account entitlement, language detection, transcription quality and upstream retention have not been verified with live requests.
 
@@ -200,6 +210,8 @@ pnpm dlx @elevenlabs/cli@latest components add live-waveform
 The owned adaptation retains the fixed-position bars and processing pattern, receiving measured audio data from the existing capture/session. It opens no extra microphone and keeps one canvas across recording states. The official source is in [the ElevenLabs UI repository](https://github.com/elevenlabs/ui/blob/main/apps/www/registry/elevenlabs-ui/ui/live-waveform.tsx).
 
 Orbkit's unused gallery exports were removed for Vite Fast Refresh compatibility.
+
+The Blossom Picker is adapted from [Nexvyn UI](https://ui.nexvyn.dev/components/color-picker), supplied by its [color-picker registry](https://ui.nexvyn.dev/r/color-picker.json). The owned source in `src/components/ui/color-picker-standalone.tsx` and `src/components/ui/blossom picker/` retains its petal and arc renderers, adds keyboard/reduced-motion support, and routes cues through Dot's existing sound controller. The application uses an always-expanded opaque picker inside the Radix popover. Orbkit's owned runtime additionally redraws changed targets under reduced motion without creating a new context.
 
 Original source licenses are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

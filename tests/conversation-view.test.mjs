@@ -198,3 +198,31 @@ test('capture state reaches the unified composer without replacing conversation 
     assert.doesNotMatch(html, /aria-label="Start call"|aria-label="Start recording"/)
   } finally { delete globalThis.__viewCapture }
 })
+
+
+test('selection is scoped to user and semantic assistant message text, excluding turn error UI', () => {
+  const html = render({ turns: [{ id: 'selection', userText: 'Selectable question', assistantText: '## Heading\n\n[Link](https://example.com) and **emphasis**\n\n```js\nconst value = 1\n```\n\n| A | B |\n| --- | --- |\n| one | two |', status: 'failed', error: 'Status stays unselectable' }] })
+  assert.match(html, /<p data-selectable-message="true"[^>]*>Selectable question<\/p>/)
+  assert.match(html, /<div data-selectable-message="true" class="typeset[^>]*>/)
+  assert.equal([...html.matchAll(/data-selectable-message/g)].length, 2)
+  assert.match(html, /<h2[^>]*>Heading/)
+  assert.match(html, /<a href="https:\/\/example.com"/)
+  assert.match(html, /<code>/)
+  assert.match(html, /<table>/)
+  assert.match(html, /class="conversation-turn-error"[^>]*>/)
+  assert.doesNotMatch(html, /class="conversation-turn-error"[^>]*data-selectable-message/)
+})
+
+test('only user messages use accent Bubble roles and the distinct message selection highlight', async () => {
+  const html = render({ turns: [{ id: 'bubble', userText: 'User question', assistantText: 'Neutral assistant prose', status: 'complete', error: null }] })
+  assert.match(html, /data-slot="bubble" data-variant="user" data-align="end"/)
+  assert.match(html, /data-selectable-message="true"[^>]*data-slot="bubble-content"[^>]*>User question<\/p>/)
+  assert.equal([...html.matchAll(/data-variant="user"/g)].length, 1)
+  assert.match(html, /class="conversation-reply"[^>]*>[^]*Neutral assistant prose/)
+  const bubble = await readFile(new URL('src/components/ui/bubble.tsx', root), 'utf8')
+  assert.match(bubble, /user:\s*"[^"\n]*bg-user-bubble[^"\n]*text-user-bubble-foreground/)
+  const css = await readFile(new URL('src/index.css', root), 'utf8')
+  assert.match(css, /\[data-slot="bubble"\]\[data-variant="user"\] ::selection\s*\{\s*background-color: var\(--user-bubble-selection\);\s*color: var\(--user-bubble-selection-foreground\);/)
+  // Assistant prose and native editable fields keep the existing selection policy.
+  assert.match(css, /(?:^|\n)::selection\s*\{\s*background-color: var\(--selection\);\s*color: var\(--selection-foreground\);/)
+})

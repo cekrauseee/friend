@@ -128,20 +128,27 @@ export function TextConversationView({
   const [requestedOpen, setRequestedOpen] = useState(false)
   const displayedVoiceError = useTransientError(voiceError, voiceStatus)
   const { showLargeOrb, composerOpen, calling } = conversationPresentation(turns.length, voiceStatus, requestedOpen, draft)
+  const voiceBusy = calling || voiceStatus === 'checking'
   const sceneRef = useRef<HTMLElement>(null)
   const footerRef = useRef<HTMLDivElement>(null)
   const orbRef = useRef<HTMLDivElement>(null)
   const scene = useConversationScene(showLargeOrb, sceneRef, footerRef, orbRef)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const openComposer = useCallback(() => setRequestedOpen(true), [])
-  const dictation = useComposerDictation({ draft, enabled: ready && !calling && activeTurnId === null, onDraftChange: setDraft, onSend, onOpen: openComposer })
+  const dictation = useComposerDictation({ draft, enabled: ready && !voiceBusy && activeTurnId === null, onDraftChange: setDraft, onSend, onOpen: openComposer })
+  function cancelDictation() {
+    dictation.cancel()
+    if (!turns.length && !draft.trim()) setRequestedOpen(false)
+    else requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }))
+  }
   const callAllowed = useRef(false)
   useLayoutEffect(() => { callAllowed.current = !dictation.active && turns.length === 0 }, [dictation.active, turns.length])
   const toggleCall = () => { if (callAllowed.current) { dictation.cancel(); onToggleCall() } }
-  useComposerShortcuts({ enabled: ready && !calling && !dictation.active, open: composerOpen, inputRef, onOpen: openComposer, onDraftChange: setDraft })
+  useComposerShortcuts({ enabled: ready && !voiceBusy && !dictation.active, open: composerOpen, inputRef, onOpen: openComposer, onDraftChange: setDraft })
   const reducedMotion = useReducedMotion()
   const latest = turns.at(-1)
-  const voiceAnnouncement = voiceStatus === 'connecting' ? 'Connecting call.'
+  const voiceAnnouncement = voiceStatus === 'checking' ? 'Checking call configuration. Activate the call button again to cancel.'
+    : voiceStatus === 'connecting' ? 'Connecting call.'
     : voiceStatus === 'connected' ? 'Call connected.'
       : voiceStatus === 'closing' ? 'Ending call.' : 'Call ended.'
   const announcement = latest?.status === 'waiting' ? 'Message sent. Thinking.'
@@ -156,7 +163,7 @@ export function TextConversationView({
   }, [ready, composerOpen, dictation.active])
 
   function sendDraft() {
-    if (dictation.active) return
+    if (dictation.active || voiceStatus === 'checking') return
     const acceptedId = onSend(draft)
     if (acceptedId !== null) setDraft('')
   }
@@ -250,7 +257,7 @@ export function TextConversationView({
               onSubmit={sendDraft}
               onToggleCall={toggleCall}
               showCall={turns.length === 0}
-              dictation={{ ...dictation, cancel: () => { dictation.cancel(); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })) } }}
+              dictation={{ ...dictation, cancel: cancelDictation }}
               voiceStatus={voiceStatus}
               inputBands={inputBands}
               hasVoiceError={Boolean(displayedVoiceError)}

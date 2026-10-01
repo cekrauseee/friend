@@ -47,6 +47,25 @@ test('provider discovery is local, no-store, and contains no credentials', async
   assert.equal((await run(voice.provider)).status, 405)
 })
 
+test('preflight rejects missing or blank selected credentials before any upstream call', async () => {
+  let calls = 0
+  const fetcher = async () => { calls++; throw new Error('Unexpected upstream call') }
+  for (const options of [
+    { provider: 'openai' }, { provider: 'openai', openaiApiKey: '  ' },
+    { provider: 'elevenlabs', elevenlabsAgentId: 'agent_test' },
+    { provider: 'elevenlabs', elevenlabsApiKey: 'test-only' },
+    { provider: 'elevenlabs', elevenlabsApiKey: '  ', elevenlabsAgentId: 'agent_test' },
+  ]) {
+    const res = await run(createVoiceApis({ ...options, fetch: fetcher }).provider, { method: 'GET' })
+    assert.equal(res.status, 503)
+    assert.match(res.body.error, /requires .* on the server/)
+    assert.equal(res.headers['Cache-Control'], 'no-store')
+  }
+  const openai = await run(createVoiceApis({ provider: 'openai', openaiApiKey: 'test-only' }).provider, { method: 'GET' })
+  assert.deepEqual(openai.body, { provider: 'openai' })
+  assert.equal(calls, 0)
+})
+
 test('private token pins the validated v4 Turbo version and exposes only the bootstrap fields', async () => {
   const calls = []
   const voice = api(async (url, init) => {

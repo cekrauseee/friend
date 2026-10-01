@@ -161,7 +161,7 @@ test('authenticated call/text transitions retain shared state, sound suppression
   assert.equal(f.access.check.mock.callCount(), 1)
   find(tree, 'TextConversationView').props.onToggleCall()
   assert.equal(f.text.cancelActive.mock.callCount(), 1)
-  while (f.session.getSnapshot().status === 'connecting') await Promise.resolve()
+  while (['checking', 'connecting'].includes(f.session.getSnapshot().status)) await Promise.resolve()
   tree = f.render(App)
   assert.equal(find(tree, 'TextConversationView').props.voiceStatus, 'connected')
   assert.equal(f.soundActive.at(-1), true)
@@ -227,3 +227,25 @@ test('call handlers retained by animations cannot overlap dictation or restart a
   assert.equal(f.toggleCall.mock.callCount(), 1)
   assert.equal(f.dictation.cancel.mock.callCount(), 1)
 })
+
+for (const [name, draft, hasMessages, expectedOpen] of [
+  ['empty initial screen', '', false, false],
+  ['initial screen with a draft', 'Keep this draft', false, true],
+  ['existing conversation with an empty draft', '', true, true],
+]) {
+  test(`canceling dictation restores the correct composer state on ${name}`, () => {
+    const turns = hasMessages ? [{ id: 'one', userText: 'Hello', assistantText: 'Hi', status: 'complete', error: null }] : []
+    let tree = view(f.session.getSnapshot(), { turns })
+    find(tree, 'ConversationComposer').props.onOpen()
+    f.dictationOptions.onDraftChange(draft)
+    f.dictation.active = true
+    tree = view(f.session.getSnapshot(), { turns })
+    find(tree, 'ConversationComposer').props.dictation.cancel()
+    f.dictation.active = false
+    tree = view(f.session.getSnapshot(), { turns })
+    const composer = find(tree, 'ConversationComposer').props
+    assert.equal(composer.open, expectedOpen)
+    assert.equal(composer.draft, draft)
+    assert.equal(f.dictation.cancel.mock.callCount(), 1)
+  })
+}

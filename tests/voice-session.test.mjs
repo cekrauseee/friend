@@ -69,6 +69,38 @@ afterEach(() => {
   saved.forEach(([key, descriptor]) => descriptor ? Object.defineProperty(globalThis, key, descriptor) : delete globalThis[key])
 })
 
+test('configuration failures never enter call layout or start an audio engine', async () => {
+  for (const stage of ['discovery', 'token']) {
+    request.mock.mockImplementation(async (path) => stage === 'discovery' || path === '/api/elevenlabs-session'
+      ? Response.json({ error: 'Configure the selected voice provider.' }, { status: 503 })
+      : Response.json({ provider: 'elevenlabs' }))
+    const createOpenAI = mock.fn()
+    const call = session({ createOpenAI })
+    const states = []
+    call.subscribe(() => states.push(call.getSnapshot().status))
+    await call.start()
+    assert.deepEqual(states, ['checking', 'error'])
+    assert.equal(sdk.mock.callCount(), 0)
+    assert.equal(createOpenAI.mock.callCount(), 0)
+    assert.equal(navigator.mediaDevices.getUserMedia.mock.callCount(), 0)
+  }
+})
+
+test('pending preflight ignores repeated starts and stays cancelable without entering call layout', async () => {
+  const waiting = deferred()
+  request.mock.mockImplementation(() => waiting.promise)
+  const call = session()
+  const starting = call.start()
+  assert.equal(call.getSnapshot().status, 'checking')
+  await call.start()
+  assert.equal(request.mock.callCount(), 1)
+  call.toggle()
+  assert.equal(call.getSnapshot().status, 'idle')
+  waiting.resolve(Response.json({ provider: 'elevenlabs' }))
+  await starting
+  assert.equal(sdk.mock.callCount(), 0)
+})
+
 test('ElevenLabs receives only the transient token and public WebRTC callbacks, never an agent override', async () => {
   const call = session()
   await call.start()

@@ -1,3 +1,16 @@
+.dot,
+.dot *,
+html {
+  scrollbar-width: none;
+  scrollbar-gutter: auto;
+}
+
+.dot::-webkit-scrollbar,
+.dot *::-webkit-scrollbar,
+html::-webkit-scrollbar {
+  display: none;
+}
+
 .dot {
   display: grid;
   min-block-size: max(100svh, 24rem);
@@ -64,13 +77,17 @@
 
 .conversation-scroll {
   --scroll-fade-b-size: 24px;
-  scrollbar-gutter: stable both-edges;
   scroll-padding-block-start: var(--conversation-anchor-inset);
   min-block-size: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: none;
   overflow-anchor: none;
+}
+
+.conversation-scroll:focus {
+  /* The scroll region has no frame; child controls keep their focus rings. */
+  outline: none;
 }
 
 .conversation-content,
@@ -80,8 +97,7 @@
 }
 
 .conversation-content {
-  /* Keep the previous turn above the viewport when the new turn anchors. */
-  gap: calc(var(--conversation-anchor-inset) + var(--spacing) * 2);
+  gap: calc(var(--spacing) * 12);
   max-inline-size: calc(28rem + var(--conversation-inset-start) + var(--conversation-inset-end));
   padding-inline: var(--conversation-inset-start) var(--conversation-inset-end);
   padding-block-start: calc(max(1rem, env(safe-area-inset-top)) + var(--spacing) * 2 + 36px);
@@ -97,7 +113,7 @@
 .conversation-user-row {
   display: flex;
   justify-content: flex-end;
-  margin-block-end: calc(var(--spacing) * 4);
+  margin-block-end: calc(var(--spacing) * 6);
 }
 
 .conversation-assistant,
@@ -112,6 +128,10 @@
 
 .conversation-assistant {
   position: relative;
+}
+
+.conversation-markdown > :first-child {
+  margin-block-start: 0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -305,8 +325,11 @@
   }
 
   .conversation-composer-surface {
-    transition: inset-inline-end 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-      border-radius 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: inset-inline-start 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      inset-inline-end 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-radius 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      background-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 }
 
@@ -317,7 +340,6 @@
   padding: 8px calc(var(--spacing) * 3) 4px;
   font-size: var(--text-sm);
   line-height: 1.5;
-  scrollbar-width: thin;
 }
 
 .conversation-composer-row[data-expanded='false'] .conversation-composer-input {
@@ -365,11 +387,6 @@
   position: relative;
 }
 
-[data-action='call'][data-active='true'] {
-  background: var(--call-end);
-  color: var(--call-end-foreground);
-}
-
 [data-action='call'] svg {
   position: absolute;
   stroke-width: 2;
@@ -392,12 +409,6 @@
   line-height: var(--leading-relaxed);
   text-align: center;
   text-wrap: pretty;
-}
-
-@media (hover: hover) {
-  [data-action='call'][data-active='true']:hover {
-    background: var(--call-end-hover);
-  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -448,7 +459,7 @@
   max-inline-size: 100%;
 }
 
-.conversation-composer-row[data-open='false'] .conversation-composer-surface,
+.conversation-composer-row[data-open='false']:not([data-dictating='true']) .conversation-composer-surface,
 .conversation-composer-row[data-open='false'] .conversation-composer-field-wrap {
   opacity: 0;
   pointer-events: none;
@@ -525,9 +536,16 @@
   inset-inline-end: 0;
 }
 
-.conversation-composer-row[data-dictating='true'] :is(.conversation-composer-field-wrap, .conversation-composer-surface) {
+.conversation-composer-row[data-dictating='true'] .conversation-composer-field-wrap {
   opacity: 0;
   pointer-events: none;
+}
+
+.conversation-composer-row[data-dictating='true'] .conversation-composer-surface {
+  inset-inline-start: calc(2.25rem + var(--spacing) * 1.5);
+  inset-inline-end: calc(4.5rem + var(--spacing) * 3);
+  border-radius: var(--radius-2xl);
+  background: var(--secondary);
 }
 
 .conversation-dictation {
@@ -555,6 +573,7 @@
   inline-size: 100%;
   block-size: 36px;
   padding-block: 6px;
+  background: transparent;
 }
 
 .conversation-dictation-error {
@@ -567,10 +586,4 @@
 
 .conversation-dictation-error .call-error {
   flex: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .conversation-dictation-feedback [data-slot='spinner'] {
-    animation: none;
-  }
 }

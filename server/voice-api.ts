@@ -135,9 +135,15 @@ export function createVoiceApis(options: {
   timeoutMs?: number
 }) {
   const openai = createLiveApi(options.provider === 'openai' ? options.openaiApiKey : undefined)
+  const configurationError = () => options.provider === 'openai'
+    ? options.openaiApiKey?.trim() ? null : 'OpenAI voice requires OPENAI_API_KEY on the server.'
+    : options.elevenlabsApiKey?.trim() && options.elevenlabsAgentId?.trim()
+      ? null : 'ElevenLabs voice requires ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the server.'
   return {
     provider(request: IncomingMessage, response: ServerResponse) {
-      if (allowed(request, response, 'GET')) reply(response, 200, { provider: options.provider })
+      if (!allowed(request, response, 'GET')) return
+      const error = configurationError()
+      reply(response, error ? 503 : 200, error ? { error } : { provider: options.provider })
     },
     async openaiSession(request: IncomingMessage, response: ServerResponse) {
       if (options.provider === 'openai') return openai(request, response)
@@ -151,7 +157,7 @@ export function createVoiceApis(options: {
       }
       const key = options.elevenlabsApiKey
       const agentId = options.elevenlabsAgentId
-      if (!key || !agentId) {
+      if (!key?.trim() || !agentId?.trim()) {
         reply(response, 503, { error: 'ElevenLabs voice requires ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the server.' })
         return
       }

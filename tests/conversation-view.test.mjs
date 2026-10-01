@@ -153,8 +153,30 @@ test('starting and processing keep cancellation available and prevent another fi
     assert.match(html, /aria-label="Cancel recording"[^>]*>/)
     assert.match(html, /aria-label="Stop recording and insert transcript"[^>]*disabled=""/)
     assert.match(html, /aria-label="Accept recording and send message"[^>]*disabled=""/)
-    assert.match(html, status === 'starting' ? /Starting recording/ : /Transcribing/)
+    assert.match(html, /data-slot="live-waveform" data-processing="true"/)
+    assert.doesNotMatch(html, /Starting recording|Transcribing|data-slot="spinner"/)
   }
+})
+
+test('call checks leave the composer in place and disable competing recording while remaining cancelable', () => {
+  const html = render({ voiceStatus: 'checking' })
+  assert.match(html, /data-calling="false"/)
+  assert.match(html, /aria-label="Cancel call check"/)
+  assert.match(html, /aria-label="Start recording"[^>]*aria-disabled="true"/)
+  assert.doesNotMatch(html, /aria-label="Start recording"[^>]*\sdisabled=""/)
+  assert.doesNotMatch(html, /data-slot="spinner"|call-check/)
+  assert.match(html, /data-slot="live-waveform"/)
+  assert.match(html, /class="unified-voice-feedback"[^>]*style="[^"]*width:0/)
+})
+
+test('call preflight keeps the idle button variant, dimensions and icons', async () => {
+  const { CallButton } = await import(await componentModule(new URL('src/components/call-button.tsx', root)))
+  const button = status => renderToStaticMarkup(createElement(CallButton, { status, hasError: false, onClick() {} }))
+  const idle = button('idle'), checking = button('checking')
+  assert.equal(idle.match(/class="([^"]+)"/)[1], checking.match(/class="([^"]+)"/)[1])
+  assert.equal(idle.match(/data-variant="([^"]+)"/)[1], checking.match(/data-variant="([^"]+)"/)[1])
+  assert.equal(idle.match(/data-size="([^"]+)"/)[1], checking.match(/data-size="([^"]+)"/)[1])
+  assert.equal(idle.slice(idle.indexOf('<svg')), checking.slice(checking.indexOf('<svg')))
 })
 
 test('recording errors keep the draft editable and expose explicit dismissal', () => {

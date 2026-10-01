@@ -23,7 +23,7 @@ Voice and dictation default to OpenAI: set `OPENAI_API_KEY` in `.env.local` to a
 pnpm dev
 ```
 
-Open the localhost URL printed by Vite. Select the phone button and allow microphone access. When connected, speak normally. Select the red button to end the call. Selecting it while connecting cancels setup.
+Open the localhost URL printed by Vite. Select the phone button. The app checks the selected provider’s local configuration before showing the call waveform; ElevenLabs also validates the agent and obtains its token first. Allow microphone access when startup proceeds. When connected, speak normally. Select the red button to end the call. Selecting it while connecting cancels setup.
 
 Keys and provider settings are read only by the local server. Never use a `VITE_` prefix for them; that would expose them to the browser. Environment files are ignored by Git. Restart the development server after changing configuration.
 
@@ -37,7 +37,7 @@ Selecting chat opens the composer. Typing anywhere outside another editable fiel
 
 User messages appear as right-aligned bubbles. Assistant replies use semantic Markdown styled with shadcn Typeset, simple syntax-highlighted code containers, and Mermaid diagrams. Code and table toolbars are omitted. The small agent orb stays below the latest response and smoothly moves as its height changes. The large initial orb is removed after the first message.
 
-On send, a bottom spacer creates just enough scroll reach to align the new user message near the top, including when the transcript is shorter than the viewport. Remaining spacer is reused without accumulation. Reply growth and upward reader scroll consume it irreversibly; retry does not replenish it. Streaming never follows the response automatically. The reader can use the centered jump-to-latest control for an explicit smooth jump to the real content end. Scrollbars remain at the viewport edge, with content padding inside the transcript and a short fade above the composer.
+On send, a bottom spacer creates just enough scroll reach to align the new user message near the top, including when the transcript is shorter than the viewport. Remaining spacer is reused without accumulation. Reply growth and upward reader scroll consume it irreversibly; retry does not replenish it. Streaming never follows the response automatically. The reader can use the centered jump-to-latest control for an explicit smooth jump to the real content end. Scrollbars are hidden while native wheel, touch and keyboard scrolling remain available, with content padding inside the transcript and a short fade above the composer.
 
 Incoming deltas are buffered for display with a seeded, non-cyclic rhythm. The visual clock keeps its phase across short gaps and adds brief, single-use pauses at prose boundaries; code does not receive prose pauses. Chunk sizes increase with backlog and content age. The presentation targets 200ms of lag, releases content aged 350ms at the next scheduled deadline, and drains the remaining queue within 250ms of transport completion while the scheduler is running. Text, Markdown whitespace, and Unicode graphemes are preserved. The turn remains active until displayed text drains, so completion feedback and future conversation context agree with the visible response. Canceling discards pending display work; retry starts a fresh attempt.
 
@@ -59,11 +59,11 @@ This is a localhost development integration using [Codex app-server authenticati
 
 ## Dictation
 
-Select the microphone beside the chat control or composer to dictate a text message. Allow microphone access; the composer keeps its existing draft while a fixed waveform shows local microphone activity. Calls and dictation cannot run together. The phone control disappears once the text conversation contains messages.
+Select the microphone beside the chat control or composer to dictate a text message. Allow microphone access; the composer keeps its existing draft while the LiveWaveform shows local microphone activity. The same canvas remains mounted during microphone startup and transcription, using a processing wave without visible status labels. Reduced motion uses a static waiting pattern; screen-reader announcements still describe each state. Calls and dictation cannot run together. The phone control disappears once the text conversation contains messages.
 
 - **Stop** transcribes the recording, appends the trimmed transcript to the existing draft, and returns focus to editing without sending. A space separates the draft and transcript unless the draft already ends in whitespace.
 - **Check** transcribes and submits that same merged draft through the existing text conversation. The draft clears only when the conversation accepts the send; a rejected send leaves the merged text available to edit. An accepted turn that later fails uses the existing retry behavior.
-- **Cancel** discards the recording or aborts transcription and preserves the original draft. Cancellation, page exit, authentication changes and stale results cannot insert or send text.
+- **Cancel** discards the recording or aborts transcription and preserves the original draft. On the initial orb screen, an empty draft returns to compact controls; existing drafts and conversations return to the editable composer. Cancellation, page exit, authentication changes and stale results cannot insert or send text.
 
 Recording stays in browser memory until Stop or Check. The completed WebM or MP4 recording is sent once to `POST /api/transcription`. `DOT_TRANSCRIPTION_PROVIDER=openai` uses `gpt-transcribe` with `OPENAI_API_KEY`; `DOT_TRANSCRIPTION_PROVIDER=elevenlabs` uses Scribe v2 (`scribe_v2`) with `ELEVENLABS_API_KEY`, independently of text chat and voice calls. Omitting the variable selects OpenAI. Explicit blank or unknown values fail at server startup. A missing selected key produces a recoverable configuration error, with no fallback to another provider. ElevenLabs detects the language automatically; audio-event tagging and speaker diarization are disabled. The server accepts raw audio bytes from matching localhost origins, validates the container, and returns trimmed nonempty text. It holds audio only in bounded memory, sends no-store responses, and does not save recordings or transcripts. Uploaded audio remains subject to the selected provider's account data policy, retention settings and billing; local memory-only handling does not guarantee upstream deletion or zero retention.
 
@@ -191,19 +191,15 @@ The orb is [Orbkit SHDR-14](https://github.com/zzzzshawn/orbkit), installed with
 pnpm dlx shadcn@latest add zzzzshawn/orbkit/shdr-14
 ```
 
-The waveform comes from [ElevenLabs UI](https://github.com/elevenlabs/ui). Its documented installation is:
+The waveform is adapted from [ElevenLabs UI LiveWaveform](https://ui.elevenlabs.io/docs/components/live-waveform). Its documented installation is:
 
 ```sh
-pnpm dlx @elevenlabs/cli@latest components add waveform
+pnpm dlx @elevenlabs/cli@latest components add live-waveform
 ```
 
-The hosted registry was rate-limited during setup, so the identical published registry item was installed from the official GitHub repository:
+The owned adaptation retains the fixed-position bars and processing pattern, receiving measured audio data from the existing capture/session. It opens no extra microphone and keeps one canvas across recording states. The official source is in [the ElevenLabs UI repository](https://github.com/elevenlabs/ui/blob/main/apps/www/registry/elevenlabs-ui/ui/live-waveform.tsx).
 
-```sh
-pnpm dlx shadcn@latest add https://raw.githubusercontent.com/elevenlabs/ui/main/apps/www/public/r/waveform.json
-```
-
-Only the base `Waveform` renderer is retained. It displays live frequency data at fixed positions; the scrolling, synthetic, recording, and additional microphone-capture variants are omitted. Orbkit's unused gallery exports were removed for Vite Fast Refresh compatibility.
+Orbkit's unused gallery exports were removed for Vite Fast Refresh compatibility.
 
 Original source licenses are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

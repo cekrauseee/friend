@@ -66,7 +66,7 @@ SOFTWARE.
 
 Source: https://github.com/elevenlabs/ui
 
-Adapted file: `src/components/ui/waveform.tsx` (base renderer only).
+Adapted file: `src/components/ui/live-waveform.tsx` (controlled static renderer and processing animation).
 
 ```text
 MIT License

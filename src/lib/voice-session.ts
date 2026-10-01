@@ -143,7 +143,7 @@ export class VoiceSession {
   }
 
   start = async () => {
-    if (this.#sdkPending || ['connecting', 'connected', 'closing'].includes(this.#snapshot.status)) return
+    if (this.#sdkPending || ['checking', 'connecting', 'connected', 'closing'].includes(this.#snapshot.status)) return
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.AudioContext || !window.RTCPeerConnection) {
       this.#fail('Use a supported browser on HTTPS or localhost to start a call.')
       return
@@ -154,7 +154,8 @@ export class VoiceSession {
     const current = () => generation === this.#generation
     const abort = new AbortController()
     this.#abort = abort
-    this.#publish({ ...IDLE, status: 'connecting' })
+    // Preflight keeps the composer in place until the selected engine can start.
+    this.#publish({ ...IDLE, status: 'checking' })
     this.#timer = setTimeout(() => this.#fail('The call took too long to connect. Please try again.'), 30_000)
     try {
       // Preserve OpenAI's gesture-time audio unlock while discovering the engine.
@@ -171,6 +172,7 @@ export class VoiceSession {
         clearTimeout(this.#timer)
         const context = this.#preparedContext!
         this.#preparedContext = null // Ownership transfers to the existing engine.
+        this.#publish({ ...IDLE, status: 'connecting' })
         await engine.start(context)
         return
       }
@@ -184,6 +186,7 @@ export class VoiceSession {
       if (!current()) return
       if (result?.provider !== 'elevenlabs' || result.model !== 'eleven_v4_turbo'
         || typeof result.conversationToken !== 'string' || !result.conversationToken.trim()) throw new Error('Invalid conversation token.')
+      this.#publish({ ...IDLE, status: 'connecting' })
       let owned: ElevenLabsConversation | null = null
       const retain = (conversation: ElevenLabsConversation) => {
         owned = conversation
@@ -258,7 +261,7 @@ export class VoiceSession {
     this.#publish(this.#sdkPending ? { ...IDLE, status: 'closing' } : IDLE)
   }
   toggle = () => {
-    if (this.#snapshot.status === 'connecting' || this.#snapshot.status === 'connected') this.end()
+    if (['checking', 'connecting', 'connected'].includes(this.#snapshot.status)) this.end()
     else if (this.#snapshot.status !== 'closing') void this.start()
   }
 }

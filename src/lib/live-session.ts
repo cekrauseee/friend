@@ -1,7 +1,7 @@
 import { AudioMeter, SILENT_BANDS } from './audio-meter.ts'
 import { waitForIce } from './webrtc.ts'
 
-export type CallStatus = 'idle' | 'connecting' | 'connected' | 'closing' | 'error'
+export type CallStatus = 'idle' | 'checking' | 'connecting' | 'connected' | 'closing' | 'error'
 
 export interface CallSnapshot {
   status: CallStatus

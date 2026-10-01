@@ -3,9 +3,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
-@source '../node_modules/streamdown/dist/*.js';
-@source '../node_modules/@streamdown/code/dist/*.js';
-@source '../node_modules/@streamdown/mermaid/dist/*.js';
+@import "@fontsource-variable/geist-mono";
+@import 'katex/dist/katex.min.css';
+
+.typeset-docs {
+  --typeset-font-body: var(--font-inter);
+  --typeset-font-heading: var(--font-inter);
+  --typeset-font-mono: var(--font-geist-mono);
+  --typeset-size: 14px;
+  --typeset-leading: 1.75;
+  --typeset-flow: 1.25em;
+}
 
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
@@ -14,6 +22,8 @@
 }
 
 :root {
+  --font-inter: 'Inter Variable', sans-serif;
+  --font-geist-mono: 'Geist Mono Variable', monospace;
   color-scheme: light;
   font-family: var(--font-sans);
   color: var(--foreground);
@@ -156,14 +166,6 @@ body {
 #root {
   min-block-size: 100svh;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  [data-sd-animate],
-  [data-sd-animate-marker]::marker {
-    animation: none;
-  }
-}
-
 
 @layer base {
   * {

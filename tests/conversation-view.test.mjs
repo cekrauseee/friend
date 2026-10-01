@@ -18,7 +18,7 @@ async function componentModule(url) {
   }
   let code = ts.transpileModule(source, {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext },
-  }).outputText.replace(/^import ['"]streamdown\/styles.css['"];?$/m, '')
+  }).outputText
   for (const name of new Set([...code.matchAll(/from ["']([^"']+)["']/g)].map((match) => match[1]))) {
     const resolved = name.startsWith('@/')
       ? await componentModule(new URL(`src/${name.slice(2)}.tsx`, root))

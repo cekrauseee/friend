@@ -1,13 +1,15 @@
-import { code } from '@streamdown/code'
-import { mermaid } from '@streamdown/mermaid'
-import { Streamdown, defaultComponents, useIsCodeFenceIncomplete, type Components, type ExtraProps, type MermaidErrorComponentProps } from 'streamdown'
-import { useReducedMotion } from 'motion/react'
-import { Children, isValidElement, useEffect, useState, type ComponentProps, type ReactNode } from 'react'
-import { Button } from '@/components/ui/button'
+import Markdown, { type Components, type ExtraProps } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import { Children, createContext, isValidElement, useContext, type ComponentProps, type ReactNode } from 'react'
 import { MarkdownCodeBlock } from '@/components/markdown-code-block'
-import 'streamdown/styles.css'
+import { MarkdownDelta } from '@/components/markdown-delta'
+import { MarkdownDiagram } from '@/components/markdown-diagram'
+import { codeSource, remarkDeltaText, type MarkdownDelta as Delta } from '@/lib/markdown-deltas'
 
-const plugins = { code, mermaid }
+const emptyDeltas: readonly Delta[] = []
+const MarkdownContext = createContext({ text: '', streaming: false, deltas: emptyDeltas })
 
 function codeText(children: ReactNode): string {
   return Children.toArray(children).map((child): string => {
@@ -16,94 +18,57 @@ function codeText(children: ReactNode): string {
   }).join('')
 }
 
-function MarkdownCode(props: (ComponentProps<'code'> | Record<string, unknown>) & ExtraProps) {
-  const incomplete = useIsCodeFenceIncomplete()
-  const children = props.children as ReactNode
-  if (!('data-block' in props)) return <code>{children}</code>
-  const language = typeof props.className === 'string' ? props.className.match(/language-([^\s]+)/)?.[1] ?? '' : ''
-  if (language === 'mermaid') return <defaultComponents.code {...props as ComponentProps<'code'> & ExtraProps} />
+function MarkdownPre({ node, children }: ComponentProps<'pre'> & ExtraProps) {
+  const { text, streaming, deltas } = useContext(MarkdownContext)
+  const code = node?.children.find((child) => child.type === 'element' && child.tagName === 'code')
+  // Display math is transformed by rehype-katex, rather than a code block.
+  if (!code || code.type !== 'element') return <pre>{children}</pre>
+  const classes = code.properties.className
+  const language = Array.isArray(classes) ? String(classes.find((name) => String(name).startsWith('language-')) ?? '').slice(9) : ''
   const source = codeText(children).replace(/\n$/, '')
-  return <MarkdownCodeBlock source={source} language={language} incomplete={incomplete} />
+  const start = node?.position?.start.offset ?? 0
+  const raw = text.slice(start, node?.position?.end.offset ?? start)
+  const content = codeSource(raw, start)
+  const block = <MarkdownCodeBlock source={source} language={language} raw={content.raw} start={content.start} deltas={deltas} />
+  return language === 'mermaid' && (content.closed || !streaming)
+    ? <MarkdownDiagram source={source} fallback={block} /> : block
 }
 
-function MarkdownTable({ children }: (ComponentProps<'table'> | Record<string, unknown>) & ExtraProps) {
-  return <div className="typeset-scroll" tabIndex={0} role="region" aria-label="Table"><table>{children as ReactNode}</table></div>
+function MarkdownTable({ children }: ComponentProps<'table'>) {
+  return <div className="typeset-scroll" tabIndex={0} role="region" aria-label="Table"><table>{children}</table></div>
 }
 
-// Render semantic HTML; Typeset owns prose styling rather than code-block chrome.
-const markdownComponents: Components = {
-  p: 'p', h1: 'h1', h2: 'h2', h3: 'h3', h4: 'h4', h5: 'h5', h6: 'h6',
-  blockquote: 'blockquote', hr: 'hr', ul: 'ul', ol: 'ol', li: 'li', strong: 'strong',
-  thead: 'thead', tbody: 'tbody', tr: 'tr', th: 'th', td: 'td',
-  table: MarkdownTable, code: MarkdownCode,
+function MarkdownSpan({ node, children, ...props }: ComponentProps<'span'> & ExtraProps) {
+  const id = node?.properties['data-markdown-delta']
+  const startedAt = node?.properties['data-delta-started-at']
+  return typeof id === 'string' && typeof startedAt === 'number'
+    ? <MarkdownDelta id={id} startedAt={startedAt}>{children}</MarkdownDelta>
+    : <span {...props}>{children}</span>
 }
 
-function MermaidError({ chart, retry }: MermaidErrorComponentProps) {
-  return (
-    <div className="conversation-diagram-error">
-      <p>Could not render this diagram. Its source is below.</p>
-      <pre><code>{chart}</code></pre>
-      <Button type="button" variant="secondary" onClick={retry}>Retry diagram</Button>
-    </div>
-  )
-}
-
-const mermaidOptions = { errorComponent: MermaidError }
-const textAnimation = {
-  animation: 'blurIn',
-  duration: 200,
-  easing: 'ease-out',
-  sep: 'word',
-  stagger: 30,
-  maxBacklogMs: 200,
-} as const
-
-// Keep the final tokens mounted until their scheduled entrance has finished.
-// Switching to static mode at completion would replace the entire Markdown tree.
-function useStreamingAnimation(text: string, streaming: boolean) {
-  const [previous, setPrevious] = useState({ text, streaming, settling: false })
-  let settling = previous.settling
-  if (text !== previous.text || streaming !== previous.streaming) {
-    settling = streaming || previous.streaming || previous.settling
-    setPrevious({ text, streaming, settling })
-  }
-
-  useEffect(() => {
-    if (streaming || !settling) return
-    const timer = setTimeout(() => {
-      setPrevious((state) => ({ ...state, settling: false }))
-    }, textAnimation.maxBacklogMs + textAnimation.duration)
-    return () => clearTimeout(timer)
-  }, [text, streaming, settling])
-
-  return streaming || settling
-}
+// Semantic content stays unstyled. Typeset owns all prose and code typography.
+const components: Components = { pre: MarkdownPre, table: MarkdownTable, span: MarkdownSpan }
 
 interface AssistantMarkdownProps {
   text: string
   streaming: boolean
+  deltas?: readonly Delta[]
 }
 
-export function AssistantMarkdown({ text, streaming }: AssistantMarkdownProps) {
-  const reducedMotion = useReducedMotion()
-  const animating = useStreamingAnimation(text, streaming)
-
+export function AssistantMarkdown({ text, streaming, deltas = emptyDeltas }: AssistantMarkdownProps) {
   return (
-    <Streamdown
-      className="typeset conversation-markdown"
-      mode="streaming"
-      parseIncompleteMarkdown={animating}
-      plugins={plugins}
-      components={markdownComponents}
-      controls={false}
-      mermaid={mermaidOptions}
-      animated={reducedMotion ? false : textAnimation}
-      isAnimating={animating}
-      skipHtml
-      disallowedElements={['img']}
-      dir="auto"
-    >
-      {text}
-    </Streamdown>
+    <div className="typeset typeset-docs max-w-[33em] conversation-markdown" dir="auto">
+      <MarkdownContext.Provider value={{ text, streaming, deltas }}>
+        <Markdown
+          remarkPlugins={[remarkGfm, remarkMath, [remarkDeltaText, { source: text, deltas }]]}
+          rehypePlugins={[rehypeKatex]}
+          components={components}
+          skipHtml
+          disallowedElements={['img']}
+        >
+          {text}
+        </Markdown>
+      </MarkdownContext.Provider>
+    </div>
   )
 }

@@ -17,6 +17,7 @@ import { interfaceSounds } from '@/lib/interface-sounds'
 import { useComposerShortcuts } from '@/hooks/use-composer-shortcuts'
 import { useComposerDictation } from '@/hooks/use-composer-dictation'
 import { surfaceHidden, surfaceVisible, surfaceExit, surfaceSpring, surfaceFade } from '@/lib/surface-motion'
+import type { MarkdownDelta } from '@/lib/markdown-deltas'
 
 const MotionMessageScroller = motion.create(MessageScroller)
 
@@ -26,6 +27,7 @@ export interface ConversationTurn {
   id: string
   userText: string
   assistantText: string
+  assistantDeltas?: MarkdownDelta[]
   status: TurnStatus
   error: string | null
   presentationAccelerated?: boolean
@@ -92,7 +94,7 @@ function TurnView({ turn, latest, active, canRetry, onRetry }: TurnViewProps) {
       </motion.div>
       <div className="conversation-assistant" aria-busy={active} aria-describedby={turn.status === 'failed' && turn.error ? errorId : undefined}>
         <div data-assistant-reply={turn.id} className="conversation-reply" dir="auto">
-          {turn.assistantText ? <AssistantMarkdown text={turn.assistantText} streaming={turn.status === 'streaming' && active} /> : null}
+          {turn.assistantText ? <AssistantMarkdown text={turn.assistantText} streaming={turn.status === 'streaming' && active} deltas={turn.assistantDeltas} /> : null}
         </div>
         <AnimatePresence initial={active}>
           {latest ? <CompactAgentOrb key={turn.id} status={turn.status} /> : null}

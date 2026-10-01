@@ -114,50 +114,27 @@
   position: relative;
 }
 
-.conversation-markdown {
-  --typeset-size: var(--text-sm);
-  --typeset-leading: 1.6;
-  --typeset-flow: 1em;
-  font-size: var(--typeset-size);
-  line-height: var(--typeset-leading);
-}
-
-.conversation-markdown ol {
-  padding-inline-start: 2.5em;
-  list-style-position: outside;
-}
-
-.conversation-markdown ol > li::marker {
-  font-variant-numeric: tabular-nums;
-}
-
-.conversation-markdown .markdown-code-block {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-2xl);
-  background: color-mix(in oklch, var(--input) 50%, transparent);
-  padding: calc(var(--spacing) * 3);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-  white-space: pre;
-  overflow-wrap: normal;
-  overscroll-behavior-y: auto;
-  tab-size: 2;
-}
-
 @media (prefers-color-scheme: dark) {
-  .markdown-code-block span[style] {
+  .conversation-markdown [data-syntax-token] {
     color: var(--shiki-dark, inherit) !important;
   }
 }
 
-.conversation-markdown :is(pre, table, [data-streamdown='mermaid'], [data-streamdown='code']) {
+.conversation-markdown :is(pre, table, .markdown-diagram) {
   max-inline-size: 100%;
   overflow-x: auto;
 }
 
-.conversation-markdown a {
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
+.conversation-markdown pre {
+  white-space: pre;
+  overflow-wrap: normal;
+  overscroll-behavior-y: auto;
+}
+
+.markdown-diagram svg {
+  display: block;
+  max-inline-size: 100%;
+  block-size: auto;
 }
 
 .conversation-markdown :is(a, button, summary, pre, .typeset-scroll):focus-visible {
@@ -197,23 +174,6 @@
 
 .conversation-turn-error p {
   margin: 0 0 0.5rem;
-}
-
-.conversation-diagram-error {
-  min-inline-size: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: calc(var(--spacing) * 3);
-}
-
-.conversation-diagram-error p {
-  margin: 0 0 0.5rem;
-}
-
-.conversation-diagram-error pre {
-  overflow-x: auto;
-  padding: calc(var(--spacing) * 2);
-  background: var(--secondary);
 }
 
 .conversation-footer {

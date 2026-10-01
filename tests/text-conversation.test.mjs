@@ -213,3 +213,47 @@ test('real failures drain received text before exposing the retry state', async 
   assert.equal(store.getState().turns[0].error, 'Stream failed.')
   assert.equal(store.getState().activeTurnId, null)
 })
+
+test('network delta identities survive cadence splitting and batched presentation', async () => {
+  const { store, attempts, clock } = setup()
+  store.getState().sendText('question')
+  const first = 'multiple words in a single large delta '.repeat(10)
+  attempts[0].onDelta(first)
+  clock.advance(75)
+  const initial = store.getState().turns[0].assistantDeltas[0]
+  assert.equal(initial.start, 0)
+  assert.ok(initial.end < first.length)
+  assert.ok(initial.startedAt > 0)
+  clock.advance(75)
+  const updated = store.getState().turns[0].assistantDeltas[0]
+  assert.equal(updated.id, initial.id)
+  assert.equal(updated.startedAt, initial.startedAt)
+  assert.ok(updated.end > initial.end)
+  attempts[0].onDelta('next delta')
+  attempts[0].onDelta(' and last delta')
+  attempts[0].resolve()
+  await tick()
+  clock.flush()
+  const turn = store.getState().turns[0]
+  assert.equal(turn.assistantDeltas.length, 3)
+  assert.equal(new Set(turn.assistantDeltas.map(({ id }) => id)).size, 3)
+  assert.equal(turn.assistantDeltas[0].end, first.length)
+  assert.equal(turn.assistantDeltas[1].start, first.length)
+  assert.equal(turn.assistantDeltas[2].end, turn.assistantText.length)
+})
+
+test('retry resets animation ranges and cannot reuse the previous attempt identity', async () => {
+  const { store, attempts, clock } = setup()
+  const id = store.getState().sendText('question')
+  attempts[0].onDelta('partial answer')
+  clock.advance()
+  const oldId = store.getState().turns[0].assistantDeltas[0].id
+  store.getState().cancelActive()
+  store.getState().retryTurn(id)
+  assert.deepEqual(store.getState().turns[0].assistantDeltas, [])
+  attempts[1].onDelta('new answer')
+  clock.advance()
+  const delta = store.getState().turns[0].assistantDeltas[0]
+  assert.notEqual(delta.id, oldId)
+  assert.equal(delta.start, 0)
+})

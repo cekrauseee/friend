@@ -93,3 +93,17 @@ test('CLI works outside project cwd and logs no values on success or failure', a
   assert.match(failure.stderr, /unclosed quote/)
   assert.doesNotMatch(failure.stdout + failure.stderr, /private-marker/)
 })
+
+
+test('current template adds Speech Engine ingress settings while preserving retired local settings', async () => {
+  const example = await readFile(new URL('../.env.example', import.meta.url), 'utf8')
+  const current = 'ELEVENLABS_AGENT_ID=previous-agent\nELEVENLABS_API_KEY=private-marker\nDOT_TEXT_PROVIDER=codex\n'
+  const result = syncEnvironment(example, current)
+  assert.match(result.content, /^ELEVENLABS_SPEECH_ENGINE_ID=$/m)
+  assert.match(result.content, /^DOT_SPEECH_ENGINE_HOST=127\.0\.0\.1$/m)
+  assert.match(result.content, /^DOT_SPEECH_ENGINE_PORT=3001$/m)
+  assert.match(result.content, /^ELEVENLABS_API_KEY=private-marker$/m)
+  assert.match(result.content, /# Additional local settings\nELEVENLABS_AGENT_ID=previous-agent/)
+  assert.doesNotMatch(example, /ELEVENLABS_AGENT_ID/)
+  assert.equal(syncEnvironment(example, result.content).content, result.content)
+})

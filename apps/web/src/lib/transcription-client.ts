@@ -1,3 +1,5 @@
+import { apiPaths } from '@dot/contracts'
+import { apiUrl } from './api-url.ts'
 export type TranscriptionTransport = (audio: Blob, signal: AbortSignal) => Promise<string>
 
 const fallback = 'Could not transcribe the recording. Check your connection and try again.'
@@ -20,7 +22,7 @@ export class TranscriptionError extends Error {
 /** Upload only a completed recording; credentials and model selection stay on the server. */
 export const transcribeAudio: TranscriptionTransport = async (audio, signal) => {
   try {
-    const response = await fetch('/api/transcription', {
+    const response = await fetch(apiUrl(apiPaths.transcription), {
       method: 'POST',
       headers: { 'Content-Type': audio.type },
       body: audio,

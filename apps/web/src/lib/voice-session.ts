@@ -1,3 +1,5 @@
+import { apiPaths, type ApiPath } from '@dot/contracts'
+import { apiUrl } from './api-url.ts'
 import { SILENT_BANDS } from './audio-meter.ts'
 import { LiveSession } from './live-session.ts'
 import { startElevenLabs } from './elevenlabs-conversation.ts'
@@ -106,8 +108,8 @@ export class VoiceSession {
     } else this.#publish({ ...IDLE, status: 'error', error: message })
   }
 
-  async #request(path: string, signal: AbortSignal, method = 'GET') {
-    const response = await fetch(path, { method, signal, cache: 'no-store' })
+  async #request(path: ApiPath, signal: AbortSignal, method = 'GET') {
+    const response = await fetch(apiUrl(path), { method, signal, cache: 'no-store' })
     const result = await response.json()
     if (!response.ok) throw new Error(typeof result?.error === 'string' ? result.error : 'Could not reach the voice service. Please try again.')
     return result
@@ -162,7 +164,7 @@ export class VoiceSession {
       this.#preparedContext = new window.AudioContext()
       void this.#preparedContext.resume().catch(() => {})
       let provider
-      try { provider = await this.#request('/api/voice-provider', abort.signal) }
+      try { provider = await this.#request(apiPaths.voiceProvider, abort.signal) }
       catch (error) { if (current()) this.#fail(error instanceof Error ? error.message : 'Could not reach the voice service. Please try again.'); return }
       if (!current()) return
       if (provider?.provider === 'openai') {
@@ -181,7 +183,7 @@ export class VoiceSession {
       if (!current()) return
       this.#preparedContext = null
       let result
-      try { result = await this.#request('/api/elevenlabs-session', abort.signal, 'POST') }
+      try { result = await this.#request(apiPaths.elevenlabsSession, abort.signal, 'POST') }
       catch (error) { if (current()) this.#fail(error instanceof Error ? error.message : 'Could not reach the voice service. Please try again.'); return }
       if (!current()) return
       if (result?.provider !== 'elevenlabs' || result.model !== 'eleven_v4_turbo'

@@ -1,3 +1,5 @@
+import { apiPaths } from '@dot/contracts'
+import { apiUrl } from './api-url.ts'
 import type { ChatMessage } from '@dot/contracts'
 export type { ChatMessage } from '@dot/contracts'
 
@@ -67,7 +69,7 @@ function parseEvent(line: string): { type: 'delta'; text: string } | { type: 'do
 export const sendTextChat: TextChatTransport = async (messages, signal, onDelta) => {
   let response: Response
   try {
-    response = await fetch('/api/chat', {
+    response = await fetch(apiUrl(apiPaths.chat), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages }),

@@ -1,3 +1,5 @@
+import { apiPaths } from '@dot/contracts'
+import { apiUrl } from './api-url.ts'
 import { AudioMeter, SILENT_BANDS } from './audio-meter.ts'
 import { waitForIce } from './webrtc.ts'
 
@@ -243,7 +245,7 @@ export class LiveSession {
       const sdp = peer.localDescription?.sdp
       if (!sdp) throw new Error('Could not connect. Please try again.')
 
-      const response = await fetch('/api/session', {
+      const response = await fetch(apiUrl(apiPaths.session), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sdp }),

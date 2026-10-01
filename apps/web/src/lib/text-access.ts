@@ -1,3 +1,5 @@
+import { apiPaths, type TextAccessAction } from '@dot/contracts'
+import { apiUrl } from './api-url.ts'
 import type { TextAccessStatus } from '@dot/contracts'
 export type AccessSnapshot = { pending: boolean; message: string | null; checking: boolean; authenticated: boolean | null }
 type LoginWindow = { closed: boolean; location: { href: string }; close(): void; opener: unknown }
@@ -5,8 +7,8 @@ type AccessStatus = TextAccessStatus
 const failed = 'Could not open text chat. Check the local server and try again.'
 const canceled = 'ChatGPT sign-in was canceled. Try signing in again.'
 
-async function accessRequest(action: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
-  const response = await fetch(`/api/text-access/${action}`, { method: 'POST', signal, keepalive: action === 'cancel' })
+async function accessRequest(action: TextAccessAction, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  const response = await fetch(apiUrl(apiPaths.textAccess[action]), { method: 'POST', signal, keepalive: action === 'cancel' })
   const body: unknown = await response.json()
   if (!body || typeof body !== 'object') throw new Error(failed)
   if (!response.ok) {

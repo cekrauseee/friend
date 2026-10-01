@@ -5,6 +5,7 @@ import { Readable } from 'node:stream'
 import { test } from 'node:test'
 import OpenAI from 'openai'
 import { createChatApi } from '../server/chat-api.ts'
+import { conversationInstructions } from '../server/conversation-config.ts'
 
 const history = [
   { role: 'user', content: 'Hello' },
@@ -85,7 +86,7 @@ test('streams ordered text with fixed settings, safe NDJSON framing and one done
   assert.ok(!res.text.includes('private-id'))
   assert.ok(!res.text.includes('usage'))
   assert.deepEqual(settings, {
-    model: 'gpt-6-luna', reasoning: { effort: 'none' }, tools: [], tool_choice: 'none',
+    model: 'gpt-6-luna', instructions: conversationInstructions, reasoning: { effort: 'none' }, tools: [], tool_choice: 'none',
     input: history, stream: true, store: false, max_output_tokens: 8192,
   })
   assert.equal('previous_response_id' in settings, false)

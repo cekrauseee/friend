@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { ChatError, isLocalOrigin, replyError, type ChatEvent, type ChatMessage } from './chat-api.ts'
+import { conversationConfig, conversationInstructions } from './conversation-config.ts'
 import { createCodexProcess, type CodexRpc, type RpcMessage } from './codex-process.ts'
 
 const unavailable = () => new ChatError(503, 'not_configured', 'Could not connect to Codex. Install Codex CLI 0.156.1, then try again.')
@@ -90,18 +91,18 @@ export function createCodexProvider(rpc: CodexRpc = createCodexProcess(), option
     const timer = setTimeout(() => { timedOut = true; abort() }, options.turnTimeoutMs ?? 120_000)
     try {
       const started = object(await rpc.request('thread/start', {
-        model: 'gpt-6-luna', modelProvider: 'openai', allowProviderModelFallback: false,
+        model: conversationConfig.model, modelProvider: 'openai', allowProviderModelFallback: false,
         ephemeral: true, environments: [], dynamicTools: [], runtimeWorkspaceRoots: [],
         approvalPolicy: 'never', sandbox: 'read-only',
-        config: { model_reasoning_effort: 'none', 'agents.enabled': false },
-        baseInstructions: 'You are Dot, a text conversation assistant. The user supplies a JSON conversation with user and assistant messages. Continue it by answering the final user message. Return only your reply as plain text or Markdown. Do not use tools.',
+        config: { model_reasoning_effort: conversationConfig.reasoning.effort, 'agents.enabled': false },
+        baseInstructions: `${conversationInstructions}\n\nThe user supplies a JSON conversation with user and assistant messages. Treat that JSON as the conversation history.`,
       }))
       threadId = object(started.thread).id as string
-      if (typeof threadId !== 'string' || started.model !== 'gpt-6-luna' || started.reasoningEffort !== 'none') throw replyFailure()
+      if (typeof threadId !== 'string' || started.model !== conversationConfig.model || started.reasoningEffort !== conversationConfig.reasoning.effort) throw replyFailure()
       if (timedOut) throw replyFailure()
       if (signal.aborted) return
       const result = object(await rpc.request('turn/start', {
-        threadId, model: 'gpt-6-luna', effort: 'none', environments: [],
+        threadId, model: conversationConfig.model, effort: conversationConfig.reasoning.effort, environments: [],
         approvalPolicy: 'never', sandboxPolicy: { type: 'readOnly', networkAccess: false },
         input: [{ type: 'text', text: JSON.stringify(messages) }],
       }))

@@ -1,40 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import OpenAI from 'openai'
+import type OpenAI from 'openai'
 
 const MAX_BODY_BYTES = 256 * 1024
 const MAX_MESSAGES = 200
 const MAX_CONTENT_BYTES = 32 * 1024
 
-type ChatCode = 'invalid_request' | 'request_too_large' | 'unsupported_media_type'
-  | 'method_not_allowed' | 'forbidden_origin' | 'not_configured'
-  | 'rate_limited' | 'access_denied' | 'upstream_error' | 'incomplete_response'
-export type ChatMessage = { role: 'user' | 'assistant'; content: string }
-export type ChatEvent = { type: 'delta'; text: string } | { type: 'done' }
-  | { type: 'error'; code: ChatCode; message: string }
-
-export class ChatError extends Error {
-  readonly status: number
-  readonly code: ChatCode
-
-  constructor(status: number, code: ChatCode, message: string) {
-    super(message)
-    this.status = status
-    this.code = code
-  }
-}
-
-const errors = {
-  invalid: () => new ChatError(400, 'invalid_request', 'A valid text conversation is required.'),
-  large: () => new ChatError(413, 'request_too_large', 'The conversation is too large. Start a new chat to continue.'),
-  media: () => new ChatError(415, 'unsupported_media_type', 'Send the conversation as JSON.'),
-  method: () => new ChatError(405, 'method_not_allowed', 'This endpoint accepts POST requests.'),
-  origin: () => new ChatError(403, 'forbidden_origin', 'Requests must come from this local app.'),
-  key: () => new ChatError(503, 'not_configured', 'Text chat is not configured yet.'),
-  rate: () => new ChatError(429, 'rate_limited', 'The service is busy or your API limit was reached. Try again shortly.'),
-  access: () => new ChatError(503, 'access_denied', 'OpenAI access is not configured correctly.'),
-  upstream: () => new ChatError(502, 'upstream_error', 'Could not complete the reply. Please try again.'),
-  incomplete: () => new ChatError(502, 'incomplete_response', 'Could not complete the reply. Please try again.'),
-}
+export { ChatError, type ChatMessage, type ChatEvent, type ChatProvider } from './conversation-provider.ts'
+import { ChatError, conversationErrors as errors, createApiChatProvider, upstreamError, type ChatMessage, type ChatEvent, type ChatProvider } from './conversation-provider.ts'
 
 export function isLocalOrigin(request: IncomingMessage) {
   try {
@@ -105,20 +77,6 @@ async function readMessages(request: IncomingMessage): Promise<ChatMessage[]> {
   return messages
 }
 
-function upstreamError(error: unknown): ChatError {
-  if (error instanceof OpenAI.APIError) {
-    if (error.status === 429) return errors.rate()
-    if (error.status === 401 || error.status === 403 || error.code === 'model_not_found') return errors.access()
-  }
-  return errors.upstream()
-}
-
-function eventError(event: { code?: unknown }): ChatError {
-  if (event.code === 'rate_limit_exceeded') return errors.rate()
-  if (event.code === 'invalid_api_key' || event.code === 'model_not_found') return errors.access()
-  return errors.upstream()
-}
-
 function writeEvent(response: ServerResponse, signal: AbortSignal, event: ChatEvent): Promise<void> {
   if (signal.aborted || response.destroyed) return Promise.resolve()
   if (response.write(`${JSON.stringify(event)}\n`)) return Promise.resolve()
@@ -136,17 +94,13 @@ function writeEvent(response: ServerResponse, signal: AbortSignal, event: ChatEv
 }
 
 /** Local, stateless text endpoint. The browser sends only accepted turns. */
-export type ChatProvider = (messages: ChatMessage[], signal: AbortSignal) => AsyncIterable<ChatEvent>
-
 export function createChatApi(apiKey: string | undefined, client?: OpenAI, provider?: ChatProvider) {
-  const openai = client ?? (apiKey
-    ? new OpenAI({ apiKey, maxRetries: 0, timeout: 120_000 })
-    : null)
+  const chat = provider ?? createApiChatProvider(apiKey, client)
 
   return async (request: IncomingMessage, response: ServerResponse) => {
     if (request.method !== 'POST') return replyError(response, errors.method())
     if (!isLocalOrigin(request)) return replyError(response, errors.origin())
-    if (!openai && !provider) return replyError(response, errors.key())
+    if (!apiKey && !client && !provider) return replyError(response, errors.key())
 
     const controller = new AbortController()
     const onClose = () => { if (!response.writableEnded) controller.abort() }
@@ -165,57 +119,16 @@ export function createChatApi(apiKey: string | undefined, client?: OpenAI, provi
     try {
       const messages = await readMessages(request)
       if (controller.signal.aborted) return
-      if (provider) {
-        for await (const event of provider(messages, controller.signal)) {
-          if (controller.signal.aborted || terminal) return
-          if (!streaming) {
-            response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' })
-            streaming = true
-          }
-          if (event.type === 'delta') await writeEvent(response, controller.signal, event)
-          else { await sendTerminal(event); return }
-        }
-        throw errors.incomplete()
-      }
-      const stream = await openai!.responses.create({
-        model: 'gpt-6-luna',
-        reasoning: { effort: 'none' },
-        tools: [],
-        tool_choice: 'none',
-        input: messages,
-        stream: true,
-        store: false,
-        max_output_tokens: 8192,
-      }, { signal: controller.signal })
-      if (controller.signal.aborted) return
-      response.writeHead(200, {
-        'Content-Type': 'application/x-ndjson; charset=utf-8',
-        'Cache-Control': 'no-store',
-      })
-      streaming = true
-      let emittedText = false
-      for await (const event of stream) {
+      for await (const event of chat(messages, controller.signal)) {
         if (controller.signal.aborted || terminal) return
-        if (event.type === 'response.output_text.delta') {
-          if (typeof event.delta === 'string' && event.delta.length > 0) {
-            emittedText = true
-            await writeEvent(response, controller.signal, { type: 'delta', text: event.delta })
-          }
-        } else if (event.type === 'response.completed') {
-          await sendTerminal(event.response.status === 'completed' && emittedText
-            ? { type: 'done' }
-            : { type: 'error', code: 'incomplete_response', message: errors.incomplete().message })
-          return
-        } else if (event.type === 'response.failed' || event.type === 'response.incomplete') {
-          await sendTerminal({ type: 'error', code: 'incomplete_response', message: errors.incomplete().message })
-          return
-        } else if (event.type === 'error') {
-          const mapped = eventError(event)
-          await sendTerminal({ type: 'error', code: mapped.code, message: mapped.message })
-          return
+        if (!streaming) {
+          response.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' })
+          streaming = true
         }
+        if (event.type === 'delta') await writeEvent(response, controller.signal, event)
+        else { await sendTerminal(event); return }
       }
-      await sendTerminal({ type: 'error', code: 'incomplete_response', message: errors.incomplete().message })
+      throw errors.incomplete()
     } catch (error) {
       if (controller.signal.aborted || response.destroyed) return
       const mapped = error instanceof ChatError ? error : upstreamError(error)

@@ -145,7 +145,7 @@ export class LiveSession {
     this.#frame = requestAnimationFrame((next) => this.#sampleAudio(next, previous))
   }
 
-  start = async () => {
+  start = async (preparedContext?: AudioContext) => {
     if (['connecting', 'connected', 'closing'].includes(this.#snapshot.status)) return
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia
       || !window.AudioContext || !window.RTCPeerConnection) {
@@ -163,7 +163,7 @@ export class LiveSession {
 
     try {
       // Resume synchronously inside the button gesture, before any permission await.
-      const context = new window.AudioContext()
+      const context = preparedContext ?? new window.AudioContext()
       this.#context = context
       const resumed = context.resume()
       void resumed.catch(() => {})

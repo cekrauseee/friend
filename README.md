@@ -15,7 +15,7 @@ pnpm install
 cp .env.example .env.local
 ```
 
-For voice calls and default OpenAI dictation, set `OPENAI_API_KEY` in `.env.local` to an existing OpenAI project key with access to the required models. To use ElevenLabs dictation, set `DOT_TRANSCRIPTION_PROVIDER=elevenlabs` and `ELEVENLABS_API_KEY` to your existing ElevenLabs key with Scribe v2 access; that transcription path does not require an OpenAI key. Text chat in development uses your ChatGPT account through Codex CLI 0.156.1 on `PATH`; it does not need an API key. Then run:
+Voice and dictation default to OpenAI: set `OPENAI_API_KEY` in `.env.local` to an existing project key with access to the required models. To use ElevenLabs dictation, set `DOT_TRANSCRIPTION_PROVIDER=elevenlabs` and `ELEVENLABS_API_KEY` with Scribe v2 access. To use ElevenAgents calls, set `DOT_VOICE_PROVIDER=elevenlabs`, the same server-only `ELEVENLABS_API_KEY`, and `ELEVENLABS_AGENT_ID` as described below. The two selections are independent and their ElevenLabs paths require no OpenAI key. Text chat in development uses your ChatGPT account through Codex CLI 0.156.1 on `PATH`; it does not need an API key. Then run:
 
 ```sh
 pnpm dev
@@ -23,9 +23,9 @@ pnpm dev
 
 Open the localhost URL printed by Vite. Select the phone button and allow microphone access. When connected, speak normally. Select the red button to end the call. Selecting it while connecting cancels setup.
 
-API keys and provider selection are read only by the local server. Never use a `VITE_` prefix for credentials; that would expose them to the browser. Environment files are ignored by Git. Restart Vite after changing keys or provider selection.
+Keys and provider settings are read only by the local server. Never use a `VITE_` prefix for them; that would expose them to the browser. Environment files are ignored by Git. Restart the development server after changing configuration.
 
-Microphone access requires a supported browser on localhost or HTTPS. The orb requires WebGL. OpenAI API access and usage are billed to the configured project.
+Microphone access requires a supported browser on localhost or HTTPS. The orb requires WebGL. Calls are billed by the selected provider under the configured account; ElevenAgents usage includes its hosted conversation services.
 
 ## Text chat in development
 
@@ -41,7 +41,7 @@ Incoming deltas are buffered for display with a seeded, non-cyclic rhythm. The v
 
 UI SFX uses the Zen pack with a quiet master gain. Typing, sending, completion, retry, errors, sign-in, and call-ending feedback use short semantic cues; hover and scrolling stay silent. Agent typing selects sounds only on newly displayed content, with variable eligibility, occasional omissions, and small gain/rate changes. Recovery and final draining reduce its gain. Interface effects are suspended during voice calls and hidden-page updates. The accessible sound toggle persists its preference in localStorage; transcript and audio are not persisted. Existing mute preferences from the previous project name are preserved.
 
-Use `DOT_TEXT_PROVIDER=codex` (the development default) or `DOT_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. Voice calls use the OpenAI key; dictation uses its independently selected provider and does not use Codex or ChatGPT authentication. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `DOT_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
+Use `DOT_TEXT_PROVIDER=codex` (the development default) or `DOT_TEXT_PROVIDER=api` in `.env.local`, then restart Vite. The API option uses the existing project key and its API billing. OpenAI voice and OpenAI dictation use that key; ElevenLabs voice and dictation use their independent provider selections with the server-only ElevenLabs key. Dictation does not use Codex or ChatGPT authentication. There is no fallback from a failed Codex request to the API. For `pnpm preview`, explicitly select `DOT_TEXT_PROVIDER=api`; selecting Codex outside development is rejected. Production builds contain no Codex backend and require a separate server for chat.
 
 The Codex integration requires **Codex CLI 0.156.1**. This version is checked during initialization because environment isolation is verified against its protocol; other versions fail closed. Install that version through the official [Codex CLI instructions](https://learn.chatgpt.com/docs/cli). After upgrading the adapter, re-run the local CLI protocol test before changing the supported version.
 
@@ -84,15 +84,32 @@ The server configures voice sessions in [`server/session-config.ts`](server/sess
 
 GPT-Live handles the spoken conversation and delegates to Luna when needed. Voice, instructions, and other model settings use OpenAI's defaults. The voice/API paths have no custom tools or system prompts. The Codex adapter supplies a short instruction to continue the provided text conversation. There are no model selectors or advanced settings in the interface.
 
+## ElevenAgents voice configuration
+
+Set `DOT_VOICE_PROVIDER=elevenlabs` to use ElevenAgents for calls, or `openai` (the default) to retain GPT-Live. This selection is independent of `DOT_TEXT_PROVIDER` and `DOT_TRANSCRIPTION_PROVIDER`. Invalid provider values fail during server initialization; failures never switch providers automatically. ElevenAgents voice does not require an OpenAI API key or OpenAI credits. API text chat and OpenAI dictation retain their separate requirements.
+
+Use an existing published ElevenAgents agent with `ELEVENLABS_API_KEY` and `ELEVENLABS_AGENT_ID` on the server. Configure that agent in ElevenLabs with:
+
+- Speech model `eleven_v4_turbo` (Eleven v4 Turbo), including any supported voices and language presets.
+- A native LLM served through ElevenLabs; custom LLM endpoints are rejected. Eleven v4 Turbo supplies speech, while the agent's LLM generates replies. Recording transcription is a separate operation.
+- Audio enabled, first-message interruptions allowed, and client events `user_transcript`, `agent_response`, `agent_response_correction`, and `interruption` enabled.
+- No workflows, which could transfer to a different agent or override the checked speech engine. Language presets must retain the required speech, native LLM, audio, interruption and event configuration.
+
+Dot reads and validates the existing agent before each call, requires a published version, and requests a WebRTC conversation token pinned to that validated version. It does not create or modify hosted agents. Agent prompts, voice, native LLM and other supported settings come from the existing agent. Missing credentials, invalid configuration, unavailable model access or account limits produce recoverable call errors. Account entitlement and hosted configuration must be established separately; automated tests do not prove access to Eleven v4 Turbo.
+
 ## Connection and audio
 
-The browser captures the microphone once and creates a WebRTC connection. A local `POST /api/session` endpoint exchanges its SDP offer with OpenAI using the official TypeScript SDK. The API key and model configuration stay on the server. The browser receives only the session ID and SDP answer.
+For OpenAI calls, the browser captures the microphone once and creates a WebRTC connection. A local `POST /api/session` endpoint exchanges its SDP offer with OpenAI using the official TypeScript SDK. The API key and model configuration stay on the server. The browser receives only the session ID and SDP answer.
 
 Microphone audio travels to OpenAI over the WebRTC media track. A local analyser supplies the waveform's frequency bands without recording or scrolling history. Bars follow speech quickly and settle gradually in silence. A native audio element plays the remote model stream, while a separate analyser measures it for the orb. Chrome needs the media player to consume the remote stream; a Web Audio analyser alone can remain silent even while WebRTC receives packets. Microphone input never drives the orb or plays through the speakers. If the browser blocks playback or the player later stops or fails, the call ends with an actionable error and releases the microphone.
 
-The call becomes ready on `session.started`. Ending it silences both sides, sends `session.close`, and waits for `session.closed` before releasing the connection. A bounded timeout releases resources if finalization cannot be confirmed. Canceled startup, denied permissions, disconnects, unmounts, and page exit also release local resources. Leaving the page closes the transport immediately and cannot wait for final acknowledgment.
+An OpenAI call becomes ready on `session.started`. Ending it silences both sides, sends `session.close`, and waits for `session.closed` before releasing the connection. A bounded timeout releases resources if finalization cannot be confirmed. Canceled startup, denied permissions, disconnects, unmounts, and page exit also release local resources. Leaving the page closes the transport immediately and cannot wait for final acknowledgment.
 
-Dot does not persist audio or transcripts and does not request OpenAI session storage. Audio is sent to OpenAI for the conversation and remains subject to the configured project's API data policy.
+For ElevenAgents, `GET /api/voice-provider` discovers the server selection and `POST /api/elevenlabs-session` returns only the validated model and a short-lived conversation token. The API key stays on the server. The official `@elevenlabs/client` 1.26.0 SDK owns WebRTC microphone capture, playback and audio analysers. The waveform uses its microphone frequency data; the orb uses its output volume only while the agent speaks and clears on interruption. The app does not add a second microphone capture or playback path. Ending a connected call mutes microphone and output, then waits for SDK cleanup before allowing another call or dictation.
+
+Provider discovery and token requests abort immediately on cancellation. The SDK exposes no public early-abort handle once startup begins. Canceling, leaving the page or reaching the connection deadline invalidates callbacks and closes any late conversation handle. While mounted, the interface stays closing and excludes dictation/new calls until startup and cleanup settle. If SDK startup never settles, that state can persist; synchronous microphone release before the SDK exposes its handle cannot be guaranteed.
+
+Dot does not persist audio or transcripts and does not request OpenAI session storage. Conversation audio goes directly to the selected provider and remains subject to that account's data policy and billing. ElevenAgents retention follows the hosted agent/account settings; Dot does not override them.
 
 ## Project structure
 
@@ -101,11 +118,14 @@ Dot does not persist audio or transcripts and does not request OpenAI session st
 - `src/components/call-button.tsx` presents call actions.
 - `src/components/microphone-waveform.tsx` presents the fixed microphone waveform.
 - `src/hooks/use-live-session.ts` connects React to the session lifecycle.
-- `src/lib/live-session.ts` owns WebRTC, events, cancellation, and cleanup.
+- `src/lib/voice-session.ts` selects the server-configured engine and maintains the shared call lifecycle.
+- `src/lib/elevenlabs-conversation.ts` adapts the official ElevenAgents SDK.
+- `src/lib/live-session.ts` owns OpenAI WebRTC, events, cancellation, and cleanup.
 - `src/lib/audio-meter.ts` analyses input and output streams separately.
 - `src/lib/webrtc.ts` waits for ICE gathering.
 - `server/session-config.ts` holds the model configuration.
 - `server/live-api.ts` validates local requests and calls the OpenAI SDK.
+- `server/voice-api.ts` validates ElevenAgents configuration and returns version-pinned conversation tokens.
 - `server/transcription-api.ts` validates bounded recordings and requests transcription.
 - `server/transcription-provider.ts` adapts OpenAI GPT Transcribe and ElevenLabs Scribe v2 behind the same recording contract.
 - `src/lib/audio-capture.ts` owns local recording, frequency bands, cancellation, and cleanup.
@@ -146,9 +166,9 @@ pnpm lint
 pnpm build
 ```
 
-Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, and OpenAI/ElevenLabs requests. They cover voice resources, deferred dictation uploads, recording bounds and cleanup, transcript draft/send behavior, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls.
+Tests use Node.js's built-in runner and test doubles for browser audio, WebRTC, ElevenAgents SDK and provider requests. They cover selected voice engines, validated/version-pinned tokens, delayed SDK startup and microphone exclusion, voice resources, deferred dictation uploads, recording bounds and cleanup, transcript draft/send behavior, authentication/provider boundaries, turn lifecycle, paced display, spacer geometry, explicit scrolling, keyboard routing, Markdown semantics, sound selection, and preference compatibility. They make no live API calls.
 
-Unit tests do not verify audible browser playback, real microphone recording or live transcription. Real voice conversation and dictation requests are separate manual checks with the selected provider’s configured API key. Scribe v2 account entitlement, language detection, transcription quality and upstream retention have not been verified with live requests.
+Unit tests do not verify audible browser playback, real microphone recording or live transcription. Real voice conversations and dictation requests are separate manual checks with their selected provider configuration. ElevenAgents account/model entitlement, microphone permissions, autoplay, audible playback and audio quality remain unverified by automated checks. Scribe v2 account entitlement, language detection, transcription quality and upstream retention have not been verified with live requests.
 
 The test suite uses simulated authentication and inference. If Codex CLI 0.156.1 is installed, it also runs a local HTTP protocol test; otherwise that test is skipped. No test requires a ChatGPT account or an API key. Live login, real model entitlement, popup behavior and visual QA require a separate manual check.
 
@@ -188,6 +208,10 @@ Original source licenses are preserved in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_N
 ## API references
 
 - [ElevenLabs speech-to-text endpoint](https://elevenlabs.io/docs/api-reference/speech-to-text/convert)
+- [ElevenAgents JavaScript SDK](https://elevenlabs.io/docs/eleven-agents/libraries/java-script)
+- [ElevenAgents WebRTC conversation tokens](https://elevenlabs.io/docs/eleven-agents/api-reference/conversations/get-webrtc-token)
+- [ElevenLabs models](https://elevenlabs.io/docs/overview/models)
+- [ElevenAgents LLM configuration](https://elevenlabs.io/docs/eleven-agents/customization/llm)
 - [Speech-to-text transcription](https://developers.openai.com/api/docs/guides/speech-to-text)
 - [GPT Transcribe model](https://developers.openai.com/api/docs/models/gpt-transcribe)
 - [GPT-Live WebRTC connection](https://developers.openai.com/api/docs/guides/voice-webrtc?api=live)

@@ -1,8 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { LiveSession } from '@/lib/live-session'
+import { VoiceSession } from '@/lib/voice-session'
 
 export function useLiveSession() {
-  const [session] = useState(() => new LiveSession())
+  const [session] = useState(() => new VoiceSession())
   const snapshot = useSyncExternalStore(session.subscribe, session.getSnapshot)
 
   useEffect(() => {

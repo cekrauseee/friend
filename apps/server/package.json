@@ -1,0 +1,24 @@
+{
+  "name": "@dot/server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint . --config ../../eslint.config.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "dev": "node --watch src/index.ts --mode=development",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js --mode=production"
+  },
+  "dependencies": {
+    "openai": "7.25.0",
+    "ws": "8.22.0",
+    "@dot/contracts": "workspace:*",
+    "hono": "4.13.12",
+    "@hono/node-server": "2.1.3"
+  },
+  "devDependencies": {
+    "@types/ws": "8.18.2"
+  }
+}

@@ -8,7 +8,7 @@ Source: https://ui.nexvyn.dev/components/color-picker
 
 Registry: https://ui.nexvyn.dev/r/color-picker.json
 
-Adapted files: `src/components/ui/color-picker-standalone.tsx` and `src/components/ui/blossom picker/` (types, geometry, styles, controller and renderers). The registry's separate sound helper is not included. Dot adds keyboard interaction, reduced-motion handling, controlled shade updates and existing interface-sound integration.
+Adapted files: `apps/web/src/components/ui/color-picker-standalone.tsx` and `apps/web/src/components/ui/blossom picker/` (types, geometry, styles, controller and renderers). The registry's separate sound helper is not included. Dot adds keyboard interaction, reduced-motion handling, controlled shade updates and existing interface-sound integration.
 
 License: [MIT with the Commons Clause](https://github.com/Nexvyn/Nexvyn-ui/blob/master/LICENSE). The separately licensed anatomy/blueprint diagrams are not included.
 
@@ -64,7 +64,7 @@ SOFTWARE.
 
 Source: https://github.com/zzzzshawn/orbkit
 
-Adapted files: `src/components/ui/orbkit-core.tsx` and `src/components/ui/shdr-14.tsx`.
+Adapted files: `apps/web/src/components/ui/orbkit-core.tsx` and `apps/web/src/components/ui/shdr-14.tsx`.
 
 ```text
 MIT License
@@ -94,7 +94,7 @@ SOFTWARE.
 
 Source: https://github.com/shadcn-ui/ui
 
-Adapted files: `src/components/ui/button.tsx`.
+Adapted files: `apps/web/src/components/ui/button.tsx`.
 
 ```text
 MIT License
@@ -124,7 +124,7 @@ SOFTWARE.
 
 Source: https://github.com/elevenlabs/ui
 
-Adapted file: `src/components/ui/live-waveform.tsx` (controlled static renderer and processing animation).
+Adapted file: `apps/web/src/components/ui/live-waveform.tsx` (controlled static renderer and processing animation).
 
 ```text
 MIT License

@@ -7,7 +7,62 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^10.0.1
+        version: 10.0.1(eslint@10.11.0(jiti@2.7.0))
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.19.0
+      eslint:
+        specifier: ^10.10.0
+        version: 10.11.0(jiti@2.7.0)
+      eslint-plugin-react-hooks:
+        specifier: ^7.1.1
+        version: 7.1.1(eslint@10.11.0(jiti@2.7.0))
+      eslint-plugin-react-refresh:
+        specifier: ^0.5.6
+        version: 0.5.7(eslint@10.11.0(jiti@2.7.0))
+      globals:
+        specifier: ^17.12.0
+        version: 17.12.0
+      turbo:
+        specifier: 2.11.6
+        version: 2.11.6
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      typescript-eslint:
+        specifier: ^8.69.0
+        version: 8.71.0(eslint@10.11.0(jiti@2.7.0))(typescript@6.0.3)
+
+  apps/server:
     dependencies:
+      '@dot/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@hono/node-server':
+        specifier: 2.1.3
+        version: 2.1.3(hono@4.13.12)
+      hono:
+        specifier: 4.13.12
+        version: 4.13.12
+      openai:
+        specifier: 7.25.0
+        version: 7.25.0(undici@7.30.0)(ws@8.22.0)(zod@3.25.76)
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@types/ws':
+        specifier: 8.18.2
+        version: 8.18.2
+
+  apps/web:
+    dependencies:
+      '@dot/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@elevenlabs/client':
         specifier: 1.26.0
         version: 1.26.0(@types/dom-mediacapture-record@1.0.22)
@@ -41,9 +96,6 @@ importers:
       motion:
         specifier: 13.4.6
         version: 13.4.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      openai:
-        specifier: 7.25.0
-        version: 7.25.0(undici@7.30.0)(ws@8.22.0)(zod@3.25.76)
       radix-ui:
         specifier: ^1.6.7
         version: 1.6.7(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -77,9 +129,6 @@ importers:
       uisfx:
         specifier: 0.4.0
         version: 0.4.0
-      ws:
-        specifier: 8.22.0
-        version: 8.22.0
       zustand:
         specifier: 5.0.15
         version: 5.0.15(@types/react@19.3.0)(react@19.3.0)
@@ -87,9 +136,6 @@ importers:
       '@babel/core':
         specifier: ^7.29.7
         version: 7.29.7
-      '@eslint/js':
-        specifier: ^10.0.1
-        version: 10.0.1(eslint@10.11.0(jiti@2.7.0))
       '@rolldown/plugin-babel':
         specifier: ^0.2.3
         version: 0.2.4(@babel/core@7.29.7)(rolldown@1.2.11)(vite@8.3.1(@types/node@24.19.0)(jiti@2.7.0))
@@ -105,48 +151,26 @@ importers:
       '@types/mdast':
         specifier: 4.0.4
         version: 4.0.4
-      '@types/node':
-        specifier: ^24.13.3
-        version: 24.19.0
       '@types/react':
         specifier: ^19.2.18
         version: 19.3.0
       '@types/react-dom':
         specifier: ^19.2.7
         version: 19.3.0(@types/react@19.3.0)
-      '@types/ws':
-        specifier: 8.18.2
-        version: 8.18.2
       '@vitejs/plugin-react':
         specifier: ^6.1.1
         version: 6.1.1(@rolldown/plugin-babel@0.2.4(@babel/core@7.29.7)(rolldown@1.2.11)(vite@8.3.1(@types/node@24.19.0)(jiti@2.7.0)))(babel-plugin-react-compiler@1.0.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.7.0))
       babel-plugin-react-compiler:
         specifier: ^1.0.0
         version: 1.0.0
-      eslint:
-        specifier: ^10.10.0
-        version: 10.11.0(jiti@2.7.0)
-      eslint-plugin-react-hooks:
-        specifier: ^7.1.1
-        version: 7.1.1(eslint@10.11.0(jiti@2.7.0))
-      eslint-plugin-react-refresh:
-        specifier: ^0.5.6
-        version: 0.5.7(eslint@10.11.0(jiti@2.7.0))
-      globals:
-        specifier: ^17.12.0
-        version: 17.12.0
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3
-      typescript:
-        specifier: ~6.0.2
-        version: 6.0.3
-      typescript-eslint:
-        specifier: ^8.69.0
-        version: 8.71.0(eslint@10.11.0(jiti@2.7.0))(typescript@6.0.3)
       vite:
         specifier: ^8.3.0
         version: 8.3.1(@types/node@24.19.0)(jiti@2.7.0)
+
+  packages/contracts: {}
 
 packages:
 
@@ -1413,6 +1437,36 @@ packages:
   '@ts-morph/common@0.27.0':
     resolution: {integrity: sha512-Wf29UqxWDpc+i61k3oIOzcUfQt79PIT9y/MWfAGlrkjg6lBC1hwDECLXPVJAhWjiGbfBCxZd65F/LIZF3+jeJQ==}
 
+  '@turbo/darwin-64@2.11.6':
+    resolution: {integrity: sha512-nAvJwDBgz/cKoSPhB7YOGPFmDEwCRavFjy0jUsrGqR97cLyJqXU2rZC/zTnw+9J3DkB2gfjpolX7mKsBatMcCQ==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@turbo/darwin-arm64@2.11.6':
+    resolution: {integrity: sha512-odk6UHW9hympllPlezz7oJhPmO40+oU8BUh4zvNuSIqQ1QQll4zo1DN4IrD/3jUzkLefvMJ8UHEHlGq9WdR7tw==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@turbo/linux-64@2.11.6':
+    resolution: {integrity: sha512-PvXbwMqZPEWdWnJSIJ5D/tugnSOrRvLYKkH7iC8TLGVI+4J5znSLn3Tx1YkH5OUzFEFhxJQyHjtiRqBPbCoVlg==}
+    cpu: [x64]
+    os: [android, linux]
+
+  '@turbo/linux-arm64@2.11.6':
+    resolution: {integrity: sha512-8FKA3SqJk6fTv7Hqrmv2JnJfqiXslTRJYBwiI6eU3QXokVMYFLh1wUywF+w3MPtDfx1O/1otbps5AnijbzY1Kg==}
+    cpu: [arm64]
+    os: [android, linux]
+
+  '@turbo/windows-64@2.11.6':
+    resolution: {integrity: sha512-XPSgTg494cV31u0Uch8zRq/Jnpe8h4muwNpg9IRPrJqADrjjzxzFMtJCtBZTKVaSEDUU/ol8Gr4SYxtiHt2Tzg==}
+    cpu: [x64]
+    os: [win32]
+
+  '@turbo/windows-arm64@2.11.6':
+    resolution: {integrity: sha512-dZ0/ZFH2AU/l1KdqISVkWUSnm0ufWZyiYRLDYCL+rJAhkUDMFhTZkSnYEL2O/m0tOu/Jy/EKAnZfocuyMX3LMQ==}
+    cpu: [arm64]
+    os: [win32]
+
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
 
@@ -2513,6 +2567,10 @@ packages:
 
   hono@4.13.11:
     resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
+    engines: {node: '>=16.9.0'}
+
+  hono@4.13.12:
+    resolution: {integrity: sha512-6E2QDAc9Ick9Sq77ZrGS/dk2WUYni91aufTw6LJKpV7w8kW5/GxVUc650FOADOmlwg3K+f7Pun6XlV+pYmW6gw==}
     engines: {node: '>=16.9.0'}
 
   hookified@1.15.1:
@@ -3759,6 +3817,10 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  turbo@2.11.6:
+    resolution: {integrity: sha512-UppAr5XEHLfVdVp75nd+tzPp/wVEwS7Ken9aYjMlBnHqXynKn9IcQHd6GDOXBxDViSjpS+SzJcOF86v9Hf8GfQ==}
+    hasBin: true
+
   tw-animate-css@1.4.0:
     resolution: {integrity: sha512-7bziOlRqH0hJx80h/3mbicLW7o8qLsH5+RaLR2t+OHM3D0JlWGODQKQ4cxbK7WlvmUxpcj6Kgu6EKqjrGFe3QQ==}
 
@@ -4319,6 +4381,10 @@ snapshots:
   '@hono/node-server@2.1.3(hono@4.13.11)':
     dependencies:
       hono: 4.13.11
+
+  '@hono/node-server@2.1.3(hono@4.13.12)':
+    dependencies:
+      hono: 4.13.12
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -5341,6 +5407,24 @@ snapshots:
       fast-glob: 3.3.3
       minimatch: 10.2.6
       path-browserify: 1.0.1
+
+  '@turbo/darwin-64@2.11.6':
+    optional: true
+
+  '@turbo/darwin-arm64@2.11.6':
+    optional: true
+
+  '@turbo/linux-64@2.11.6':
+    optional: true
+
+  '@turbo/linux-arm64@2.11.6':
+    optional: true
+
+  '@turbo/windows-64@2.11.6':
+    optional: true
+
+  '@turbo/windows-arm64@2.11.6':
+    optional: true
 
   '@types/babel__core@7.20.5':
     dependencies:
@@ -6573,6 +6657,8 @@ snapshots:
       hermes-estree: 0.25.1
 
   hono@4.13.11: {}
+
+  hono@4.13.12: {}
 
   hookified@1.15.1: {}
 
@@ -8057,6 +8143,15 @@ snapshots:
       strip-bom: 3.0.0
 
   tslib@2.8.1: {}
+
+  turbo@2.11.6:
+    optionalDependencies:
+      '@turbo/darwin-64': 2.11.6
+      '@turbo/darwin-arm64': 2.11.6
+      '@turbo/linux-64': 2.11.6
+      '@turbo/linux-arm64': 2.11.6
+      '@turbo/windows-64': 2.11.6
+      '@turbo/windows-arm64': 2.11.6
 
   tw-animate-css@1.4.0: {}
 

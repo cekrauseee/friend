@@ -1,0 +1,105 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "lint": {
+      "dependsOn": [
+        "^lint"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^typecheck"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "//#test:setup": {
+      "inputs": [
+        "scripts/setup.mjs",
+        "tests/setup.test.mjs",
+        ".env.example"
+      ],
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "@dot/web#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        "dist/**"
+      ],
+      "env": [
+        "VITE_API_BASE_URL",
+        "API_PROXY_TARGET"
+      ]
+    },
+    "@dot/web#dev": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": [
+        "VITE_API_BASE_URL",
+        "API_PROXY_TARGET"
+      ]
+    },
+    "@dot/server#dev": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": [
+        "DOT_SERVER_MODE",
+        "DOT_API_HOST",
+        "DOT_API_PORT",
+        "DOT_FRONTEND_ORIGINS",
+        "DOT_TEXT_PROVIDER",
+        "DOT_TRANSCRIPTION_PROVIDER",
+        "DOT_VOICE_PROVIDER",
+        "OPENAI_API_KEY",
+        "ELEVENLABS_API_KEY",
+        "ELEVENLABS_SPEECH_ENGINE_ID",
+        "DOT_SPEECH_ENGINE_HOST",
+        "DOT_SPEECH_ENGINE_PORT"
+      ]
+    },
+    "@dot/server#test": {
+      "dependsOn": [
+        "build"
+      ],
+      "cache": false
+    }
+  },
+  "globalDependencies": [
+    "eslint.config.js"
+  ]
+}

@@ -40,7 +40,7 @@ from ElevenLabs UI with centered bars and a gradual release into silence.
 
 Text requests stream through a local endpoint using GPT-6 Luna with no reasoning
 or application tools. Development can use Codex-managed ChatGPT sign-in; the API
-provider is selected explicitly for API-key use and preview. A startup spinner
+provider uses API-key access and is the production default. A startup spinner
 and sign-in dialog keep authentication separate from the conversation controls.
 
 Received text enters a presentation buffer. A non-cyclic clock varies update
@@ -79,7 +79,7 @@ separate. Errors leave the draft intact and remain available for dismissal or re
 ## Keeping signaling separate from audio
 
 The browser requests microphone permission and creates a WebRTC connection. A
-small Node.js endpoint, mounted through Vite for local development and preview,
+standalone Node.js/Hono backend endpoint, shared by web development and preview,
 exchanges the connection offer with OpenAI using the official TypeScript SDK.
 The browser receives the session identifier and SDP answer. Credentials and
 model configuration remain on the server.
